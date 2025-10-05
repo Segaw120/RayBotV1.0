@@ -83,12 +83,12 @@ run_breadth = st.sidebar.checkbox("Enable breadth backtest", value=True)
 run_sweep = st.sidebar.checkbox("Enable grid sweep", value=False)
 
 st.sidebar.header("Hugging Face Upload")
-hf_token = st.text_input("HF Token", type="password")
 repo_name = st.text_input("HF repo name", value=f"cascade_{asset_group.lower()}")
+hf_token = os.getenv("HF_TOKEN")  # read token from environment variable
 
-st.sidebar.header("Supabase")
-SUPABASE_URL = st.text_input("Supabase URL", type="default")
-SUPABASE_KEY = st.text_input("Supabase Service Key", type="password")
+# ---------------- Supabase (hardcoded) ----------------
+SUPABASE_URL = "https://jubcotqsbvguwzklngzd.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1YmNvdHFzYnZndXd6a2xuZ3pkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTU0MjA3MCwiZXhwIjoyMDc1MTE4MDcwfQ.1HV-o9JFa_nCZGXcoap2OgOCKjRSlyFSRvKmYk70eDk"
 
 # ---------------- Feature Engineering ----------------
 def compute_engineered_features(df: pd.DataFrame, windows=(5,10,20)) -> pd.DataFrame:
@@ -126,20 +126,17 @@ def hf_upload(pt_path: str, repo_name: str, hf_token: str) -> str:
     return f"https://huggingface.co/{repo_id}/blob/main/{os.path.basename(pt_path)}"
 
 # ---------------- Supabase Logging ----------------
-def log_model_metrics_supabase(asset_group, ticker_stats, supabase_url, supabase_key, correlation_id=None):
+def log_model_metrics_supabase(asset_group, ticker_stats):
     if create_client is None:
         st.warning("Supabase client not installed")
         return
-    supabase = create_client(supabase_url, supabase_key)
-    if correlation_id is None:
-        correlation_id = str(uuid.uuid4())
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    correlation_id = str(uuid.uuid4())
 
-    # Aggregate group-level metrics
     group_metrics = {}
     for k in ticker_stats[next(iter(ticker_stats))].keys():
         group_metrics[k] = float(np.mean([v[k] for v in ticker_stats.values()]))
 
-    # Insert per-ticker rows
     for ticker, stats in ticker_stats.items():
         row = {
             "asset_group": asset_group,
@@ -152,7 +149,6 @@ def log_model_metrics_supabase(asset_group, ticker_stats, supabase_url, supabase
         }
         supabase.table("model_metrics").insert(row).execute()
 
-    # Insert aggregated group row (ticker=None)
     group_row = {
         "asset_group": asset_group,
         "ticker": None,
@@ -179,7 +175,6 @@ def run_asset_group_pipeline(asset_group, tickers):
                              interval="1d")
             if isinstance(raw, dict): raw = pd.DataFrame(raw)
             if isinstance(raw.index, pd.MultiIndex): raw = raw.reset_index(level=0, drop=True)
-            # TZ fix: unify all datetime index to tz-naive UTC
             raw.index = pd.to_datetime(raw.index, utc=True).tz_convert(None)
             raw.columns = [c.lower() for c in raw.columns]
             if "close" not in raw.columns and "adjclose" in raw.columns:
@@ -197,7 +192,6 @@ def run_asset_group_pipeline(asset_group, tickers):
 
     combined_bars = pd.concat(all_bars).sort_index()
 
-    # Generate candidates per ticker
     events = []
     for sym in tickers:
         df = combined_bars[combined_bars['symbol']==sym]
@@ -211,7 +205,7 @@ def run_asset_group_pipeline(asset_group, tickers):
         ticker_stats[sym] = {
             "num_bars": len(df),
             "num_candidates": len(df_cands),
-            "val_acc": float(np.random.rand()),  # placeholder for real metric
+            "val_acc": float(np.random.rand()),
             "breadth_score": float(np.random.rand())
         }
 
@@ -219,20 +213,17 @@ def run_asset_group_pipeline(asset_group, tickers):
     bar_idx_map = {t:i for i,t in enumerate(combined_bars.index)}
     events['t'] = events['candidate_time'].map(lambda t: bar_idx_map.get(t,0))
 
-    # Train cascade
     if CascadeTrader is None:
         st.error("CascadeTrader class not defined")
         return
     trader = CascadeTrader(seq_len=seq_len, feat_windows=(5,10,20), device=device_choice)
     trader.fit(combined_bars, events, l2_use_xgb=(xgb is not None), epochs_l1=epochs_l1, epochs_l23=epochs_l23)
 
-    # Export
     out_dir = f"artifacts_{asset_group}_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
     os.makedirs(out_dir, exist_ok=True)
     pt_path = os.path.join(out_dir, f"{asset_group}_cascade.pt")
     torch.save(trader, pt_path)
 
-    # HF upload
     hf_url = None
     if hf_token and repo_name:
         try:
@@ -241,14 +232,12 @@ def run_asset_group_pipeline(asset_group, tickers):
             logger.exception("HF upload failed: %s", e)
             st.error(f"Hugging Face upload failed: {e}")
 
-    # Supabase logging
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            log_model_metrics_supabase(asset_group, ticker_stats, SUPABASE_URL, SUPABASE_KEY)
-            st.success("Logged metrics to Supabase")
-        except Exception as e:
-            logger.exception("Supabase logging failed: %s", e)
-            st.error(f"Supabase logging failed: {e}")
+    try:
+        log_model_metrics_supabase(asset_group, ticker_stats)
+        st.success("Logged metrics to Supabase")
+    except Exception as e:
+        logger.exception("Supabase logging failed: %s", e)
+        st.error(f"Supabase logging failed: {e}")
 
     st.success(f"Training & export finished for {asset_group}")
     return {"trader": trader, "pt_path": pt_path, "hf_url": hf_url, "ticker_stats": ticker_stats}
