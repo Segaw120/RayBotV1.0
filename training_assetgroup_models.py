@@ -45,6 +45,12 @@ try:
 except Exception:
     create_client = None
 
+# CascadeTrader placeholder
+try:
+    from cascade_trader import CascadeTrader  # Adjust to your actual module path
+except Exception:
+    CascadeTrader = None
+
 # Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("cascade_trader_app")
@@ -173,7 +179,8 @@ def run_asset_group_pipeline(asset_group, tickers):
                              interval="1d")
             if isinstance(raw, dict): raw = pd.DataFrame(raw)
             if isinstance(raw.index, pd.MultiIndex): raw = raw.reset_index(level=0, drop=True)
-            raw.index = pd.to_datetime(raw.index)
+            # TZ fix: unify all datetime index to tz-naive UTC
+            raw.index = pd.to_datetime(raw.index, utc=True).tz_convert(None)
             raw.columns = [c.lower() for c in raw.columns]
             if "close" not in raw.columns and "adjclose" in raw.columns:
                 raw["close"] = raw["adjclose"]
@@ -194,7 +201,7 @@ def run_asset_group_pipeline(asset_group, tickers):
     events = []
     for sym in tickers:
         df = combined_bars[combined_bars['symbol']==sym]
-        df['rvol'] = (df['volume']/df['volume'].rolling(20,min_periods=1).mean()).fillna(1.0)
+        df.loc[:, 'rvol'] = (df['volume']/df['volume'].rolling(20,min_periods=1).mean()).fillna(1.0)
         df_cands = pd.DataFrame({
             "candidate_time": df.index,
             "label": np.random.randint(0,2,len(df))
@@ -204,7 +211,7 @@ def run_asset_group_pipeline(asset_group, tickers):
         ticker_stats[sym] = {
             "num_bars": len(df),
             "num_candidates": len(df_cands),
-            "val_acc": float(np.random.rand()),  # replace with real metrics
+            "val_acc": float(np.random.rand()),  # placeholder for real metric
             "breadth_score": float(np.random.rand())
         }
 
@@ -213,8 +220,8 @@ def run_asset_group_pipeline(asset_group, tickers):
     events['t'] = events['candidate_time'].map(lambda t: bar_idx_map.get(t,0))
 
     # Train cascade
-    if torch is None:
-        st.error("Torch not installed")
+    if CascadeTrader is None:
+        st.error("CascadeTrader class not defined")
         return
     trader = CascadeTrader(seq_len=seq_len, feat_windows=(5,10,20), device=device_choice)
     trader.fit(combined_bars, events, l2_use_xgb=(xgb is not None), epochs_l1=epochs_l1, epochs_l23=epochs_l23)
