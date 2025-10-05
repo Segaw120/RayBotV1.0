@@ -1,0 +1,13 @@
+numpy
+pandas
+streamlit
+scikit-learn
+joblib
+yahooquery
+xgboost
+torch
+huggingface-hub
+matplotlib
+plotly
+tqdm
+scipy
