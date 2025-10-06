@@ -1,11 +1,6 @@
-# prop_firm_cascade_trainer.py
 """
 Advanced prop firm trading model trainer with adaptive risk management
-- Designed for challenges with 2% max drawdown from open positions
-- Adaptive RR scaling from 1:1.1 to 1:5 based on model performance
-- Multiple specialized models per asset group with optimized entry levels
-- Integrated threshold parameter sweeping and optimization
-- Performance distribution analysis with HF model inference for parameter adjustments
+Part 1: Core imports, configuration, and risk management components
 """
 
 import os
@@ -19,7 +14,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Tuple, Optional, Union, Callable
@@ -86,6 +81,12 @@ except Exception:
     tpe = None
     STATUS_OK = None
     Trials = None
+
+# Web UI Components
+try:
+    import gradio as gr
+except Exception:
+    gr = None
 
 # Configuration
 SUPABASE_URL = "https://jubcotqsbvguwzklngzd.supabase.co"
@@ -228,12 +229,13 @@ class RiskManager:
         if pnl < 0:
             self.current_drawdown = max(self.current_drawdown, -pnl/self.account_size)
             
-    def get_position_size(self, risk_per_trade: float, stop_loss_pct: float) -> Tuple[float, bool]:
+    def get_position_size(self, risk_per_trade: float, stop_loss_pct: float) -> Tuple[float, bool, str]:
         """
         Calculate safe position size based on risk parameters
         Returns:
             - position size
             - approval flag (True if trade is approved)
+            - message explaining decision
         """
         self.reset_daily_metrics()
         
@@ -294,6 +296,11 @@ class RiskManager:
         self.update_drawdown(pnl)
         del self.open_positions[position_id]
         return pnl
+
+    """
+Advanced prop firm trading model trainer with adaptive risk management
+Part 2: Multi-level entry system and feature engineering
+"""
 
 # ---- Multi-Level Entry Threshold System ----
 class MultiLevelEntryThreshold:
@@ -363,7 +370,7 @@ class MultiLevelEntryThreshold:
 
         return df
     
-    def get_rr_for_winrate(self, winrate: float) -> Tuple[float, float]:
+    def get_rr_for_winrate(self, winrate: float) -> float:
         """Get adjusted risk-reward based on model winrate"""
         profile = RR_PROFILES[self.rr_profile]
         min_rr, max_rr = profile["min_rr"], profile["max_rr"]
@@ -550,7 +557,8 @@ def generate_signal_candidates(
     ], axis=1).max(axis=1)
     
     df['tr'] = tr
-    df['atr'] = tr.rolling(window=atr_window, min_periods=1).mean().fillna(method='bfill')
+    df['atr'] = tr.rolling(window=atr_window, min_periods=1).mean()
+    df['atr'] = df['atr'].ffill().bfill()  # Replace deprecated fillna(method='bfill')
     df['atr_pct'] = df['atr'] / df['close']  # ATR as percentage of price
     
     # Determine RR ratio based on model winrate
@@ -650,6 +658,12 @@ def generate_signal_candidates(
             records.append(rec)
     
     return pd.DataFrame.from_records(records)
+
+
+"""
+Advanced prop firm trading model trainer with adaptive risk management
+Part 3: Neural network models and ensemble training
+"""
 
 # ---- Adaptive Cascade Model ----
 if torch is not None:
@@ -958,12 +972,20 @@ class PropFirmModelEnsemble:
     def _train_tree_model(self, model, X_tr, y_tr, X_va, y_va):
         """Train a tree-based model (XGBoost, LightGBM, CatBoost)"""
         if hasattr(model, 'fit'):
-            model.fit(
-                X_tr, y_tr,
-                eval_set=[(X_va, y_va)],
-                early_stopping_rounds=20,
-                verbose=False
-            )
+            # Fix for XGBoost early_stopping_rounds issue
+            if isinstance(model, XGBClassifier):
+                model.fit(
+                    X_tr, y_tr,
+                    eval_set=[(X_va, y_va)],
+                    verbose=False
+                )
+            else:
+                model.fit(
+                    X_tr, y_tr,
+                    eval_set=[(X_va, y_va)],
+                    early_stopping_rounds=20,
+                    verbose=False
+                )
             
             # Get validation metrics
             if hasattr(model, 'predict_proba'):
@@ -1125,7 +1147,14 @@ class PropFirmModelEnsemble:
             self.run_parameter_sweep(bars, candidates)
             
         return self
-        
+
+
+"""
+Advanced prop firm trading model trainer with adaptive risk management
+Part 4: Pipeline, optimization, and main execution
+"""
+
+# PropFirmModelEnsemble methods continued
     def run_parameter_sweep(self, bars: pd.DataFrame, candidates: pd.DataFrame):
         """Run hyperparameter sweep to find optimal thresholds"""
         param_grid = {
@@ -1541,7 +1570,7 @@ class PropFirmModelEnsemble:
                 logger.warning(f"Failed to get LLM advice: {e}")
                 
         return suggestions
-        
+
 # ---- PropFirmPipeline ----
 class PropFirmPipeline:
     """
@@ -1662,7 +1691,7 @@ class PropFirmPipeline:
                 logger.debug(f"Finnage returned s={data.get('s')} for {symbol}")
                 return pd.DataFrame()
                 
-            ts = [datetime.utcfromtimestamp(int(t)) for t in data['t']]
+            ts = [datetime.fromtimestamp(int(t), tz=UTC) for t in data['t']]
             df = pd.DataFrame({
                 'open': data['o'],
                 'high': data['h'],
@@ -1863,7 +1892,7 @@ class PropFirmPipeline:
             raise ValueError("No trained models. Call train_models() first.")
             
         if output_dir is None:
-            output_dir = f"prop_firm_models_{self.asset_group}_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
+            output_dir = f"prop_firm_models_{self.asset_group}_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
             
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -1988,7 +2017,7 @@ class PropFirmPipeline:
                 "metrics_json": json.dumps(stats),
                 "num_bars": int(stats.get("num_bars", 0)),
                 "num_candidates": int(stats.get("num_candidates", 0)),
-                "trained_at": datetime.utcnow().isoformat(),
+                "trained_at": datetime.now(UTC).isoformat(),
                 "correlation_id": correlation_id,
                 "prop_firm_mode": True,
                 "max_drawdown": float(self.max_drawdown_pct)
@@ -2007,7 +2036,7 @@ class PropFirmPipeline:
             "metrics_json": json.dumps(group_metrics),
             "num_bars": int(np.nanmean([v.get("num_bars", 0) for v in ticker_stats.values()])),
             "num_candidates": int(np.nanmean([v.get("num_candidates", 0) for v in ticker_stats.values()])),
-            "trained_at": datetime.utcnow().isoformat(),
+            "trained_at": datetime.now(UTC).isoformat(),
             "correlation_id": correlation_id,
             "prop_firm_mode": True,
             "max_drawdown": float(self.max_drawdown_pct)
@@ -2035,7 +2064,7 @@ class PropFirmPipeline:
         Returns dictionary with results from each step
         """
         results = {
-            "start_time": datetime.utcnow().isoformat(),
+            "start_time": datetime.now(UTC).isoformat(),
             "asset_group": self.asset_group,
             "tickers": self.tickers
         }
@@ -2109,7 +2138,7 @@ class PropFirmPipeline:
             logger.exception(f"Pipeline error: {e}")
             results["error"] = str(e)
             
-        results["end_time"] = datetime.utcnow().isoformat()
+        results["end_time"] = datetime.now(UTC).isoformat()
         results["duration_seconds"] = (
             datetime.fromisoformat(results["end_time"]) - 
             datetime.fromisoformat(results["start_time"])
@@ -2117,589 +2146,168 @@ class PropFirmPipeline:
         
         return results
 
-# ---- MultiLevelEntryOptimizer ----
-class MultiLevelEntryOptimizer:
-    """
-    Optimizes multi-level entry thresholds for prop firm challenges
-    Finds the best entry parameters for different confidence levels
-    """
-    def __init__(
-        self,
-        max_drawdown_pct: float = 2.0,
-        rr_range: Tuple[float, float] = (1.1, 5.0),
-        base_risk_pct: float = 0.5,
-        entry_levels: Dict[str, Dict[str, float]] = ENTRY_LEVELS
-    ):
-        self.max_drawdown_pct = max_drawdown_pct
-        self.rr_range = rr_range
-        self.base_risk_pct = base_risk_pct
-        self.entry_levels = entry_levels
-        self.risk_manager = RiskManager(max_drawdown_pct=max_drawdown_pct)
+# ---- Web UI for Configuration and Training ----
+if gr is not None:
+    def create_training_ui():
+        def calculate_date_range():
+            end_date = datetime.now(UTC)
+            start_date = end_date - timedelta(days=5*365)  # 5 years
+            return start_date, end_date
         
-    def sweep_threshold_parameters(
-        self,
-        bars: pd.DataFrame,
-        candidates: pd.DataFrame,
-        predictions: pd.DataFrame,
-        n_trials: int = 50
-    ) -> Dict[str, Any]:
-        """
-        Perform parameter sweep to find optimal entry thresholds
+        def run_training_pipeline(
+            asset_group, 
+            selected_tickers, 
+            shallow_threshold,
+            medium_threshold,
+            deep_threshold,
+            max_drawdown_pct
+        ):
+            start_date, end_date = calculate_date_range()
+            
+            if not selected_tickers:
+                return "Error: No tickers selected"
+            
+            logger.info(f"Starting training for {asset_group} with {len(selected_tickers)} tickers")
+            
+            # Create entry level config with user-specified thresholds
+            global ENTRY_LEVELS
+            ENTRY_LEVELS = {
+                "shallow": {
+                    "confidence_threshold": shallow_threshold,
+                    "risk_adjustment": 0.5,
+                    "sl_multiplier": 0.8,
+                    "holding_period_factor": 0.7
+                },
+                "medium": {
+                    "confidence_threshold": medium_threshold,
+                    "risk_adjustment": 1.0,
+                    "sl_multiplier": 1.0,
+                    "holding_period_factor": 1.0
+                },
+                "deep": {
+                    "confidence_threshold": deep_threshold,
+                    "risk_adjustment": 1.3,
+                    "sl_multiplier": 1.2,
+                    "holding_period_factor": 1.2
+                }
+            }
+            
+            pipeline = PropFirmPipeline(
+                asset_group=asset_group,
+                tickers=selected_tickers,
+                start_date=start_date,
+                end_date=end_date,
+                max_drawdown_pct=max_drawdown_pct,
+                data_source='both',
+                base_risk=0.01,
+                rr_profile='balanced'
+            )
+            
+            results = pipeline.run_full_pipeline(
+                ensemble_size=3,
+                model_types=['cnn', 'xgboost'],
+                parameter_sweep=True,
+                epochs_cnn=20,
+                hf_repo_name=None
+            )
+            
+            # Format results
+            output = f"Training completed in {results.get('duration_seconds', 0):.1f} seconds\n\n"
+            output += f"Asset Group: {asset_group}\n"
+            output += f"Tickers: {', '.join(selected_tickers)}\n"
+            output += f"Data Range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}\n\n"
+            
+            output += "Models Trained:\n"
+            for model in results.get('training', {}).get('trained_models', []):
+                output += f" - {model}\n"
+                
+            if 'error' in results:
+                output += f"\nErrors: {results['error']}\n"
+                
+            return output
         
-        Args:
-            bars: DataFrame with OHLCV data
-            candidates: DataFrame with labeled trade candidates
-            predictions: DataFrame with model predictions
-            n_trials: Number of parameter combinations to try
-            
-        Returns:
-            Dictionary with optimized parameters and performance metrics
-        """
-        if hp is None or fmin is None or tpe is None or STATUS_OK is None:
-            logger.warning("hyperopt not available, using basic grid search")
-            return self._basic_grid_search(bars, candidates, predictions)
-            
-        # Map predictions to candidates
-        merged_df = self._merge_predictions_candidates(predictions, candidates, bars)
+        # Create asset selection and ticker checkboxes
+        asset_groups = list(MARKET_SYMBOLS_MAP.keys())
         
-        if merged_df.empty:
-            return {"error": "No predictions matched to candidates"}
+        with gr.Blocks(title="Prop Firm Model Trainer") as app:
+            gr.Markdown("# Advanced Prop Firm Trading Model Trainer")
+            gr.Markdown("Configure your training parameters and select assets")
             
-        # Define the search space
-        space = {
-            'shallow_threshold': hp.uniform('shallow_threshold', 0.25, 0.45),
-            'medium_threshold': hp.uniform('medium_threshold', 0.45, 0.65),
-            'deep_threshold': hp.uniform('deep_threshold', 0.65, 0.85),
-            'vol_sensitivity': hp.uniform('vol_sensitivity', 0.2, 0.6),
-            'rr_min': hp.uniform('rr_min', 1.1, 1.8),
-            'rr_max': hp.uniform('rr_max', 2.0, 5.0),
-            'sl_factor_shallow': hp.uniform('sl_factor_shallow', 0.6, 1.0),
-            'sl_factor_medium': hp.uniform('sl_factor_medium', 0.8, 1.2),
-            'sl_factor_deep': hp.uniform('sl_factor_deep', 1.0, 1.4)
-        }
-        
-        # Define the objective function
-        def objective(params):
-            # Apply thresholds
-            df = merged_df.copy()
+            with gr.Row():
+                with gr.Column(scale=1):
+                    asset_group = gr.Dropdown(
+                        choices=asset_groups, 
+                        label="Asset Group", 
+                        value=asset_groups[0]
+                    )
+                    max_drawdown = gr.Slider(
+                        minimum=0.5, 
+                        maximum=5.0, 
+                        value=2.0, 
+                        label="Max Drawdown Percentage",
+                        step=0.1
+                    )
+                
+                with gr.Column(scale=1):
+                    shallow_threshold = gr.Slider(
+                        minimum=0.2, 
+                        maximum=0.6, 
+                        value=0.35, 
+                        label="Shallow Entry Threshold",
+                        step=0.05
+                    )
+                    medium_threshold = gr.Slider(
+                        minimum=0.4, 
+                        maximum=0.7, 
+                        value=0.55, 
+                        label="Medium Entry Threshold",
+                        step=0.05
+                    )
+                    deep_threshold = gr.Slider(
+                        minimum=0.6, 
+                        maximum=0.9, 
+                        value=0.75, 
+                        label="Deep Entry Threshold",
+                        step=0.05
+                    )
             
-            # Assign entry levels based on thresholds
-            df['entry_level'] = np.select(
-                [
-                    (df['signal'] >= params['deep_threshold']),
-                    (df['signal'] >= params['medium_threshold']) & (df['signal'] < params['deep_threshold']),
-                    (df['signal'] >= params['shallow_threshold']) & (df['signal'] < params['medium_threshold']),
+            # Dynamic ticker selection based on asset group
+            ticker_selection = gr.CheckboxGroup(
+                label="Select Tickers", 
+                choices=list(MARKET_SYMBOLS_MAP.get(asset_groups[0], {}).keys())
+            )
+            
+            # Update ticker choices when asset group changes
+            def update_tickers(group):
+                return gr.CheckboxGroup.update(
+                    choices=list(MARKET_SYMBOLS_MAP.get(group, {}).keys())
+                )
+            
+            asset_group.change(update_tickers, inputs=asset_group, outputs=ticker_selection)
+            
+            # Start training button
+            train_btn = gr.Button("Start Training", variant="primary")
+            output = gr.Textbox(label="Training Results", lines=20)
+            
+            train_btn.click(
+                run_training_pipeline,
+                inputs=[
+                    asset_group,
+                    ticker_selection,
+                    shallow_threshold,
+                    medium_threshold,
+                    deep_threshold,
+                    max_drawdown
                 ],
-                ['deep', 'medium', 'shallow'],
-                default='none'
+                outputs=output
             )
-            
-            # Filter out non-entries
-            df = df[df['entry_level'] != 'none']
-            
-            if len(df) == 0:
-                return {'loss': float('inf'), 'status': STATUS_OK}
-                
-            # Calculate risk and RR for each level
-            df['sl_factor'] = df['entry_level'].map({
-                'shallow': params['sl_factor_shallow'],
-                'medium': params['sl_factor_medium'],
-                'deep': params['sl_factor_deep']
-            })
-            
-            # Calculate R:R ratio based on winrate per level
-            level_winrates = {}
-            
-            for level in ['shallow', 'medium', 'deep']:
-                level_df = df[df['entry_level'] == level]
-                if len(level_df) > 0:
-                    winrate = level_df['label'].mean()
-                    level_winrates[level] = winrate
-                else:
-                    level_winrates[level] = 0.5  # Default
-                    
-            # Assign RR based on winrate
-            df['rr_ratio'] = df.apply(
-                lambda row: self._get_rr_for_winrate(
-                    level_winrates.get(row['entry_level'], 0.5),
-                    params['rr_min'],
-                    params['rr_max']
-                ),
-                axis=1
-            )
-            
-            # Calculate expected profit
-            df['sl_pct'] = df.apply(
-                lambda row: float(row.get('atr_pct', 0.01)) * row['sl_factor'],
-                axis=1
-            )
-            
-            df['tp_pct'] = df['sl_pct'] * df['rr_ratio']
-            df['expected_value'] = (df['tp_pct'] * level_winrates.get(df['entry_level'], 0.5) - 
-                                   df['sl_pct'] * (1 - level_winrates.get(df['entry_level'], 0.5)))
-            
-            # Calculate risk-adjusted return
-            total_ev = df['expected_value'].sum()
-            n_trades = len(df)
-            
-            # Calculate drawdown risk - rough estimate
-            avg_trade_risk = df['sl_pct'].mean() * self.base_risk_pct
-            max_concurrent_trades = self.max_drawdown_pct / avg_trade_risk
-            
-            # Calculate score - balancing expected return and drawdown protection
-            if max_concurrent_trades < 3:
-                # Penalize very high risk per trade
-                score = total_ev * (max_concurrent_trades / 3)
-            else:
-                # Normal scoring
-                score = total_ev
-                
-            # Loss is negative of score (we want to maximize score)
-            return {
-                'loss': -score,
-                'total_ev': float(total_ev),
-                'n_trades': int(n_trades),
-                'avg_risk': float(avg_trade_risk),
-                'max_concurrent_trades': float(max_concurrent_trades),
-                'status': STATUS_OK
-            }
-            
-        # Run the optimization
-        trials = Trials()
-        best = fmin(
-            fn=objective,
-            space=space,
-            algo=tpe.suggest,
-            max_evals=n_trials,
-            trials=trials
-        )
         
-        # Get best parameters
-        best_params = {
-            'shallow_threshold': best['shallow_threshold'],
-            'medium_threshold': best['medium_threshold'],
-            'deep_threshold': best['deep_threshold'],
-            'vol_sensitivity': best['vol_sensitivity'],
-            'rr_min': best['rr_min'],
-            'rr_max': best['rr_max'],
-            'sl_factor_shallow': best['sl_factor_shallow'],
-            'sl_factor_medium': best['sl_factor_medium'],
-            'sl_factor_deep': best['sl_factor_deep']
-        }
-        
-        # Get performance for best parameters
-        best_result = trials.best_trial['result']
-        
-        return {
-            'optimized_params': best_params,
-            'performance': {
-                'total_expected_value': best_result['total_ev'],
-                'n_trades': best_result['n_trades'],
-                'avg_risk_per_trade': best_result['avg_risk'],
-                'max_concurrent_trades': best_result['max_concurrent_trades']
-            },
-            'all_trials': [t['result'] for t in trials.trials]
-        }
-        
-    def _basic_grid_search(
-        self,
-        bars: pd.DataFrame,
-        candidates: pd.DataFrame, 
-        predictions: pd.DataFrame
-    ) -> Dict[str, Any]:
-        """Basic grid search if hyperopt is not available"""
-        # Map predictions to candidates
-        merged_df = self._merge_predictions_candidates(predictions, candidates, bars)
-        
-        if merged_df.empty:
-            return {"error": "No predictions matched to candidates"}
-            
-        # Create parameter grid
-        param_grid = {
-            'shallow_threshold': [0.3, 0.35, 0.4],
-            'medium_threshold': [0.5, 0.55, 0.6],
-            'deep_threshold': [0.7, 0.75, 0.8],
-            'rr_min': [1.1, 1.5],
-            'rr_max': [3.0, 4.0, 5.0],
-        }
-        
-        all_results = []
-        
-        # Try all combinations
-        for shallow in param_grid['shallow_threshold']:
-            for medium in param_grid['medium_threshold']:
-                for deep in param_grid['deep_threshold']:
-                    for rr_min in param_grid['rr_min']:
-                        for rr_max in param_grid['rr_max']:
-                            params = {
-                                'shallow_threshold': shallow,
-                                'medium_threshold': medium,
-                                'deep_threshold': deep,
-                                'rr_min': rr_min,
-                                'rr_max': rr_max,
-                                'sl_factor_shallow': 0.8,
-                                'sl_factor_medium': 1.0,
-                                'sl_factor_deep': 1.2
-                            }
-                            
-                            # Apply thresholds
-                            df = merged_df.copy()
-                            
-                            # Assign entry levels
-                            df['entry_level'] = np.select(
-                                [
-                                    (df['signal'] >= deep),
-                                    (df['signal'] >= medium) & (df['signal'] < deep),
-                                    (df['signal'] >= shallow) & (df['signal'] < medium),
-                                ],
-                                ['deep', 'medium', 'shallow'],
-                                default='none'
-                            )
-                            
-                            # Filter out non-entries
-                            df = df[df['entry_level'] != 'none']
-                            
-                            if len(df) == 0:
-                                continue
-                                
-                            # Calculate basic metrics
-                            n_trades = len(df)
-                            avg_winrate = df['label'].mean()
-                            
-                            # Add to results
-                            all_results.append({
-                                'params': params,
-                                'n_trades': n_trades,
-                                'avg_winrate': avg_winrate,
-                                'score': n_trades * avg_winrate
-                            })
-                            
-        # Find best result
-        if not all_results:
-            return {"error": "No valid parameter combinations found"}
-            
-        best_result = max(all_results, key=lambda x: x['score'])
-        
-        return {
-            'optimized_params': best_result['params'],
-            'performance': {
-                'n_trades': best_result['n_trades'],
-                'avg_winrate': best_result['avg_winrate'],
-                'score': best_result['score']
-            },
-            'all_results': all_results
-        }
-                                
-    def _merge_predictions_candidates(
-        self,
-        predictions: pd.DataFrame,
-        candidates: pd.DataFrame,
-        bars: pd.DataFrame
-    ) -> pd.DataFrame:
-        """
-        Match predictions to candidates for evaluation
-        """
-        # Create mapping from time index to prediction
-        pred_map = {}
-        
-        for _, row in predictions.iterrows():
-            t_idx = int(row['t'])
-            if 0 <= t_idx < len(bars):
-                pred_map[bars.index[t_idx]] = row.to_dict()
-                
-        # Match candidates to predictions
-        merged_results = []
-        
-        for _, cand in candidates.iterrows():
-            t = pd.to_datetime(cand['candidate_time'])
-            
-            # Find exact match
-            if t in pred_map:
-                merged_row = {**cand.to_dict(), **pred_map[t]}
-                merged_results.append(merged_row)
-            else:
-                # Find nearest prediction within 1 day
-                nearest_t = None
-                min_diff = pd.Timedelta(days=1)
-                
-                for pred_t in pred_map.keys():
-                    diff = abs(pred_t - t)
-                    if diff < min_diff:
-                        min_diff = diff
-                        nearest_t = pred_t
-                        
-                if nearest_t is not None:
-                    merged_row = {**cand.to_dict(), **pred_map[nearest_t]}
-                    merged_results.append(merged_row)
-                    
-        if not merged_results:
-            return pd.DataFrame()
-            
-        merged_df = pd.DataFrame(merged_results)
-        
-        # Add signal column (use p3 if available, otherwise combined)
-        if 'p3' in merged_df.columns:
-            merged_df['signal'] = merged_df['p3']
-        elif 'shallow' in merged_df.columns and 'medium' in merged_df.columns and 'deep' in merged_df.columns:
-            merged_df['signal'] = (
-                merged_df['shallow'] * 0.2 + 
-                merged_df['medium'] * 0.5 + 
-                merged_df['deep'] * 0.3
-            )
-        else:
-            # Default to p1 if available
-            merged_df['signal'] = merged_df.get('p1', 0.5)
-            
-        return merged_df
-        
-    def _get_rr_for_winrate(
-        self,
-        winrate: float,
-        min_rr: float,
-        max_rr: float
-    ) -> float:
-        """
-        Get adjusted risk-reward based on model winrate
-        
-        Higher winrate = lower RR needed
-        Lower winrate = higher RR needed
-        """
-        rr_range = max_rr - min_rr
-        
-        if winrate >= 0.6:  # High winrate
-            low, high = ADAPTIVE_RR_CONFIG["high_winrate"]["percentile_low"], ADAPTIVE_RR_CONFIG["high_winrate"]["percentile_high"]
-            percentile = low + (high - low) * np.random.random()
-            return min_rr + percentile * rr_range
-            
-        elif winrate >= 0.5:  # Medium winrate
-            low, high = ADAPTIVE_RR_CONFIG["medium_winrate"]["percentile_low"], ADAPTIVE_RR_CONFIG["medium_winrate"]["percentile_high"]
-            percentile = low + (high - low) * np.random.random()
-            return min_rr + percentile * rr_range
-            
-        else:  # Low winrate
-            low, high = ADAPTIVE_RR_CONFIG["low_winrate"]["percentile_low"], ADAPTIVE_RR_CONFIG["low_winrate"]["percentile_high"]
-            percentile = low + (high - low) * np.random.random()
-            return min_rr + percentile * rr_range
-            
-    def get_entry_params_for_model(
-        self,
-        model_winrates: Dict[str, float],
-        optimized_params: Dict[str, Any] = None
-    ) -> Dict[str, Dict[str, Any]]:
-        """
-        Generate optimal entry parameters for a model with known winrates
-        
-        Args:
-            model_winrates: Dict with winrates for each entry level
-            optimized_params: Optional dict with optimized parameters from sweep
-            
-        Returns:
-            Dict with entry parameters for each level
-        """
-        entry_params = {}
-        
-        # Use optimized params if available
-        if optimized_params:
-            shallow_threshold = optimized_params.get('shallow_threshold', 0.35)
-            medium_threshold = optimized_params.get('medium_threshold', 0.55)
-            deep_threshold = optimized_params.get('deep_threshold', 0.75)
-            
-            sl_factor_shallow = optimized_params.get('sl_factor_shallow', 0.8)
-            sl_factor_medium = optimized_params.get('sl_factor_medium', 1.0)
-            sl_factor_deep = optimized_params.get('sl_factor_deep', 1.2)
-            
-            rr_min = optimized_params.get('rr_min', 1.1)
-            rr_max = optimized_params.get('rr_max', 5.0)
-        else:
-            # Use defaults
-            shallow_threshold = 0.35
-            medium_threshold = 0.55
-            deep_threshold = 0.75
-            
-            sl_factor_shallow = 0.8
-            sl_factor_medium = 1.0
-            sl_factor_deep = 1.2
-            
-            rr_min = 1.1
-            rr_max = 5.0
-            
-        # Generate parameters for each entry level
-        for level in ['shallow', 'medium', 'deep']:
-            winrate = model_winrates.get(level, 0.5)
-            
-            # Base parameters
-            if level == 'shallow':
-                threshold = shallow_threshold
-                sl_factor = sl_factor_shallow
-                risk_adjustment = 0.5
-            elif level == 'medium':
-                threshold = medium_threshold
-                sl_factor = sl_factor_medium
-                risk_adjustment = 1.0
-            else:  # deep
-                threshold = deep_threshold
-                sl_factor = sl_factor_deep
-                risk_adjustment = 1.3
-                
-            # Get RR based on winrate
-            rr = self._get_rr_for_winrate(winrate, rr_min, rr_max)
-            
-            # Calculate entry parameters
-            entry_params[level] = {
-                'confidence_threshold': threshold,
-                'risk_adjustment': risk_adjustment,
-                'sl_multiplier': sl_factor,
-                'tp_multiplier': sl_factor * rr,
-                'rr_ratio': rr,
-                'holding_period_factor': 0.7 if level == 'shallow' else (1.2 if level == 'deep' else 1.0),
-                'estimated_winrate': winrate
-            }
-            
-        return entry_params
-
-# ---- HF Model Inference Helper ----
-class ModelInferenceHelper:
-    """
-    Helper class for running inference with Hugging Face models
-    Can be used to get threshold adjustment suggestions from LLMs
-    """
-    def __init__(self, hf_token: str = None):
-        self.hf_token = hf_token or HF_TOKEN
-        if InferenceClient is None:
-            logger.warning("huggingface_hub.InferenceClient not available")
-            
-    def get_parameter_suggestions(
-        self,
-        performance_metrics: Dict[str, Any],
-        model_name: str = "mistralai/Mixtral-8x7B-Instruct-v0.1"
-    ) -> str:
-        """
-        Use LLM to suggest parameter adjustments based on performance metrics
-        """
-        if InferenceClient is None or not self.hf_token:
-            return "LLM inference not available. Install huggingface_hub and set HF_TOKEN."
-            
-        client = InferenceClient(token=self.hf_token)
-        
-        # Extract key performance metrics
-        overall = performance_metrics.get("thresholds", {}).get("overall", {})
-        model_winrate = overall.get("model_winrate", 0.5)
-        auc = overall.get("auc", 0.5)
-        avg_precision = overall.get("avg_precision", 0.5)
-        
-        # Extract threshold performance
-        threshold_metrics = {}
-        for k, v in performance_metrics.get("thresholds", {}).items():
-            if k.startswith("thresh_"):
-                thresh = k.split("_")[1]
-                threshold_metrics[thresh] = v
-                
-        # Format the prompt
-        prompt = f"""
-        You are an AI assistant helping optimize a trading model for prop firm challenges.
-        The model needs to maximize returns while keeping drawdown under 2%.
-        
-        Here are the performance metrics:
-        - Model winrate: {model_winrate:.2f}
-        - AUC score: {auc:.2f}
-        - Average precision: {avg_precision:.2f}
-        
-        Performance at different thresholds:
-        {json.dumps(threshold_metrics, indent=2)}
-        
-        Please analyze these metrics and suggest:
-        1. The optimal confidence threshold
-        2. Risk-reward ratio adjustments
-        3. Position sizing recommendations
-        4. Any other parameter adjustments to reduce drawdown risk
-        
-        Focus on prop firm compatibility - keeping drawdown under 2% is critical.
-        """
-        
-        try:
-            response = client.text_generation(
-                prompt,
-                model=model_name,
-                max_new_tokens=500,
-                temperature=0.3,
-                top_p=0.95
-            )
-            return response
-        except Exception as e:
-            logger.exception(f"HF inference error: {e}")
-            return f"LLM inference failed: {str(e)}"
-            
-    def visualize_performance_distribution(
-        self,
-        performance_metrics: Dict[str, Any],
-        show_plot: bool = True
-    ) -> Any:
-        """
-        Visualize performance metrics distribution
-        
-        Returns plot figure if matplotlib is available
-        """
-        try:
-            import matplotlib.pyplot as plt
-            import seaborn as sns
-            
-            # Extract threshold performance data
-            thresholds = []
-            win_rates = []
-            expected_values = []
-            trade_counts = []
-            
-            for k, v in performance_metrics.get("thresholds", {}).items():
-                if k.startswith("thresh_"):
-                    thresh = float(k.split("_")[1])
-                    thresholds.append(thresh)
-                    win_rates.append(v.get("win_rate", 0))
-                    expected_values.append(v.get("expected_value", 0))
-                    trade_counts.append(v.get("n_trades", 0))
-                    
-            if not thresholds:
-                return None
-                
-            # Create figure with subplots
-            fig, axes = plt.subplots(3, 1, figsize=(10, 12))
-            
-            # Plot win rate vs threshold
-            axes[0].plot(thresholds, win_rates, 'o-', color='blue')
-            axes[0].set_xlabel('Confidence Threshold')
-            axes[0].set_ylabel('Win Rate')
-            axes[0].set_title('Win Rate by Confidence Threshold')
-            axes[0].grid(True)
-            
-            # Plot expected value vs threshold
-            axes[1].plot(thresholds, expected_values, 'o-', color='green')
-            axes[1].set_xlabel('Confidence Threshold')
-            axes[1].set_ylabel('Expected Value')
-            axes[1].set_title('Expected Value by Confidence Threshold')
-            axes[1].grid(True)
-            
-            # Plot trade count vs threshold
-            axes[2].plot(thresholds, trade_counts, 'o-', color='red')
-            axes[2].set_xlabel('Confidence Threshold')
-            axes[2].set_ylabel('Number of Trades')
-            axes[2].set_title('Trade Count by Confidence Threshold')
-            axes[2].grid(True)
-            
-            plt.tight_layout()
-            
-            if show_plot:
-                plt.show()
-                
-            return fig
-            
-        except ImportError:
-            return "Matplotlib and seaborn required for visualization"
+        return app
 
 # ---- Main function to run pipeline ----
 def run_prop_firm_pipeline(
     asset_group: str,
     tickers: List[str],
-    start_date: datetime,
-    end_date: datetime,
     max_drawdown_pct: float = 2.0,
     hf_repo_name: str = None,
     model_types: List[str] = None
@@ -2710,8 +2318,6 @@ def run_prop_firm_pipeline(
     Args:
         asset_group: Asset group name
         tickers: List of ticker symbols
-        start_date: Start date for training data
-        end_date: End date for training data
         max_drawdown_pct: Maximum drawdown percentage
         hf_repo_name: HuggingFace repository name for model upload
         model_types: List of model types to train
@@ -2720,6 +2326,10 @@ def run_prop_firm_pipeline(
         Dictionary with results from the pipeline run
     """
     logger.info(f"Starting prop firm pipeline for {asset_group} with {len(tickers)} tickers")
+    
+    # Calculate date range for 5 years
+    end_date = datetime.now(UTC)
+    start_date = end_date - timedelta(days=5*365)  # 5 years
     
     # Create pipeline
     pipeline = PropFirmPipeline(
@@ -2751,43 +2361,42 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Prop Firm Model Training Pipeline")
     parser.add_argument("--asset-group", type=str, default="FX", help="Asset group name")
-    parser.add_argument("--start-date", type=str, default=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d"), 
-                        help="Start date (YYYY-MM-DD)")
-    parser.add_argument("--end-date", type=str, default=datetime.now().strftime("%Y-%m-%d"),
-                        help="End date (YYYY-MM-DD)")
     parser.add_argument("--max-drawdown", type=float, default=2.0, help="Maximum drawdown percentage")
     parser.add_argument("--repo", type=str, help="HuggingFace repository name")
     parser.add_argument("--models", type=str, default="cnn,xgboost", help="Comma-separated list of model types")
+    parser.add_argument("--ui", action="store_true", help="Launch web UI for configuration")
     
     args = parser.parse_args()
     
-    # Get tickers for the asset group
-    asset_group_tickers = list(MARKET_SYMBOLS_MAP.get(args.asset_group, {}).keys())
-    
-    if not asset_group_tickers:
-        print(f"No tickers found for asset group: {args.asset_group}")
-        print(f"Available asset groups: {list(MARKET_SYMBOLS_MAP.keys())}")
-        exit(1)
+    if args.ui and gr is not None:
+        app = create_training_ui()
+        app.launch()
+    else:
+        # Get tickers for the asset group
+        asset_group_tickers = list(MARKET_SYMBOLS_MAP.get(args.asset_group, {}).keys())
         
-    model_types = args.models.split(",")
-    
-    # Run pipeline
-    results = run_prop_firm_pipeline(
-        asset_group=args.asset_group,
-        tickers=asset_group_tickers,
-        start_date=datetime.strptime(args.start_date, "%Y-%m-%d"),
-        end_date=datetime.strptime(args.end_date, "%Y-%m-%d"),
-        max_drawdown_pct=args.max_drawdown,
-        hf_repo_name=args.repo,
-        model_types=model_types
-    )
-    
-    # Print summary
-    print("\n=== Pipeline Results ===")
-    print(f"Asset Group: {args.asset_group}")
-    print(f"Tickers: {len(asset_group_tickers)}")
-    print(f"Models Trained: {len(results.get('training', {}).get('trained_models', []))}")
-    print(f"Duration: {results.get('duration_seconds', 0):.1f} seconds")
-    
-    if 'error' in results:
-        print(f"Error: {results['error']}")
+        if not asset_group_tickers:
+            print(f"No tickers found for asset group: {args.asset_group}")
+            print(f"Available asset groups: {list(MARKET_SYMBOLS_MAP.keys())}")
+            exit(1)
+            
+        model_types = args.models.split(",")
+        
+        # Run pipeline
+        results = run_prop_firm_pipeline(
+            asset_group=args.asset_group,
+            tickers=asset_group_tickers,
+            max_drawdown_pct=args.max_drawdown,
+            hf_repo_name=args.repo,
+            model_types=model_types
+        )
+        
+        # Print summary
+        print("\n=== Pipeline Results ===")
+        print(f"Asset Group: {args.asset_group}")
+        print(f"Tickers: {len(asset_group_tickers)}")
+        print(f"Models Trained: {len(results.get('training', {}).get('trained_models', []))}")
+        print(f"Duration: {results.get('duration_seconds', 0):.1f} seconds")
+        
+        if 'error' in results:
+            print(f"Error: {results['error']}")
