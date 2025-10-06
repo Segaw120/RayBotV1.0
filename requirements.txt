@@ -11,3 +11,4 @@ matplotlib
 plotly
 tqdm
 scipy
+seaborn 
