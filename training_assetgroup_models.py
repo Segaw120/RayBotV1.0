@@ -153,51 +153,47 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("prop_firm_cascade")
 logger.setLevel(logging.INFO)
 
-# =============================================================================
-# CHUNK 1: Risk Management and Core Configuration
-# =============================================================================
-
 # ---- Risk-Reward Profiles ----
 RR_PROFILES = {
-    "conservative": {"min_rr": 1.1, "max_rr": 1.8, "sl_factor": 1.0},  # Lower risk
-    "balanced": {"min_rr": 1.5, "max_rr": 3.0, "sl_factor": 1.0},      # Balanced approach
-    "aggressive": {"min_rr": 2.0, "max_rr": 5.0, "sl_factor": 1.0}     # Higher reward potential
+    "conservative": {"min_rr": 1.1, "max_rr": 1.8, "sl_factor": 1.0},
+    "balanced": {"min_rr": 1.5, "max_rr": 3.0, "sl_factor": 1.0},
+    "aggressive": {"min_rr": 2.0, "max_rr": 5.0, "sl_factor": 1.0}
 }
 
 # ---- Entry Level Definitions ----
 ENTRY_LEVELS = {
     "shallow": {
         "confidence_threshold": 0.35,
-        "risk_adjustment": 0.5,     # 50% of base risk
-        "sl_multiplier": 0.8,       # Tighter stop losses for shallower entries
-        "holding_period_factor": 0.7  # Shorter holding periods
+        "risk_adjustment": 0.5,
+        "sl_multiplier": 0.8,
+        "holding_period_factor": 0.7
     },
     "medium": {
         "confidence_threshold": 0.55,
-        "risk_adjustment": 1.0,     # 100% of base risk
+        "risk_adjustment": 1.0,
         "sl_multiplier": 1.0,
         "holding_period_factor": 1.0
     },
     "deep": {
-        "confidence_threshold": 0.75, 
-        "risk_adjustment": 1.3,     # 130% of base risk for high confidence
-        "sl_multiplier": 1.2,       # Allow wider stops for deep entries
-        "holding_period_factor": 1.2  # Allow longer holding periods
+        "confidence_threshold": 0.75,
+        "risk_adjustment": 1.3,
+        "sl_multiplier": 1.2,
+        "holding_period_factor": 1.2
     }
 }
 
 # ---- Adaptive RR Configuration ----
 ADAPTIVE_RR_CONFIG = {
-    "high_winrate": {  # >60%
-        "percentile_low": 0.0,   # Use lower percentile of RR range
+    "high_winrate": {
+        "percentile_low": 0.0,
         "percentile_high": 0.3
     },
-    "medium_winrate": {  # 50-60%
-        "percentile_low": 0.3,   # Use middle percentile of RR range
+    "medium_winrate": {
+        "percentile_low": 0.3,
         "percentile_high": 0.7
     },
-    "low_winrate": {  # <50%
-        "percentile_low": 0.7,   # Use higher percentile of RR range (higher RR)
+    "low_winrate": {
+        "percentile_low": 0.7,
         "percentile_high": 1.0
     }
 }
@@ -306,9 +302,6 @@ class RiskManager:
         del self.open_positions[position_id]
         return pnl
 
-# =============================================================================
-# CHUNK 2: Multi-Level Entry System and Feature Engineering
-# =============================================================================
 
 # ---- Multi-Level Entry Threshold System ----
 class MultiLevelEntryThreshold:
@@ -465,7 +458,7 @@ class MultiLevelEntryThreshold:
 
         return pd.DataFrame(results) if results else pd.DataFrame()
 
-# ---- Advanced Feature Generation ----
+        # ---- Advanced Feature Generation ----
 def compute_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Generate advanced features for trading model
@@ -667,10 +660,6 @@ def generate_signal_candidates(
     
     return pd.DataFrame.from_records(records)
 
-# =============================================================================
-# CHUNK 3: Neural Network Models and Ensemble Training
-# =============================================================================
-
 # ---- Adaptive Cascade Model ----
 if torch is not None:
     class AdaptiveConvBlock(nn.Module):
@@ -765,6 +754,8 @@ if torch is not None:
             }
 else:
     PropFirmCascadeModel = None
+
+
 
 class PropFirmModelEnsemble:
     """
@@ -905,7 +896,6 @@ class PropFirmModelEnsemble:
         no_improve = 0
         
         for epoch in range(epochs):
-            # Training
             model.train()
             train_loss = 0
             
@@ -914,7 +904,6 @@ class PropFirmModelEnsemble:
                 optimizer.zero_grad()
                 
                 outputs = model(x_batch)
-                # Use the appropriate output based on level
                 loss = criterion(outputs["shared"], y_batch)
                 
                 loss.backward()
@@ -923,7 +912,6 @@ class PropFirmModelEnsemble:
                 
                 train_loss += loss.item() * len(x_batch)
                 
-            # Validation
             model.eval()
             val_loss = 0
             val_preds = []
@@ -942,7 +930,6 @@ class PropFirmModelEnsemble:
             val_loss /= len(ds_va)
             scheduler.step(val_loss)
             
-            # Early stopping check
             if val_loss < best_loss:
                 best_loss = val_loss
                 best_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
@@ -952,12 +939,10 @@ class PropFirmModelEnsemble:
                 if no_improve >= patience:
                     break
         
-        # Load best model
         if best_state is not None:
             model.load_state_dict(best_state)
             model = model.to(device)
             
-        # Get validation metrics
         model.eval()
         val_preds = []
         val_labels = []
@@ -978,7 +963,6 @@ class PropFirmModelEnsemble:
     def _train_tree_model(self, model, X_tr, y_tr, X_va, y_va):
         """Train a tree-based model (XGBoost, LightGBM, CatBoost)"""
         if hasattr(model, 'fit'):
-            # Fix for XGBoost early_stopping_rounds issue
             if isinstance(model, XGBClassifier):
                 model.fit(
                     X_tr, y_tr,
@@ -993,7 +977,6 @@ class PropFirmModelEnsemble:
                     verbose=False
                 )
             
-            # Get validation metrics
             if hasattr(model, 'predict_proba'):
                 val_preds = model.predict_proba(X_va)[:, 1]
                 val_auc = roc_auc_score(y_va, val_preds)
@@ -1005,386 +988,320 @@ class PropFirmModelEnsemble:
         else:
             raise ValueError("Model doesn't have a fit method")
 
+
     def fit(
-        self, 
-        bars: pd.DataFrame, 
-        candidates: pd.DataFrame, 
-        epochs_cnn: int = 20,
-        train_size: float = 0.7,
-        val_size: float = 0.15,
-        parameter_sweep: bool = True,
-    ):
-        """
-        Train multiple specialized models for different entry levels
+    self, 
+    bars: pd.DataFrame, 
+    candidates: pd.DataFrame, 
+    epochs_cnn: int = 20,
+    train_size: float = 0.7,
+    val_size: float = 0.15,
+    parameter_sweep: bool = True,
+):
+    """
+    Train the ensemble model on bars data and candidate signals
+    """
+    if candidates is None or candidates.empty:
+        raise ValueError("No candidates provided for training")
+    
+    features = compute_advanced_features(bars)
+    
+    if 'entry_level' in candidates.columns:
+        level_candidates = {
+            level: candidates[candidates['entry_level'] == level]
+            for level in self.entry_levels.keys()
+        }
+    else:
+        level_candidates = {
+            "medium": candidates,
+            "shallow": candidates.sample(frac=0.7, random_state=42),
+            "deep": candidates.sample(frac=0.7, random_state=24)
+        }
         
-        Args:
-            bars: DataFrame with OHLCV data
-            candidates: DataFrame with labeled trade candidates
-            epochs_cnn: Number of epochs for CNN models
-            train_size: Fraction of data to use for training
-            val_size: Fraction of data to use for validation
-            parameter_sweep: Whether to run hyperparameter sweep
-        """
-        if candidates is None or candidates.empty:
-            raise ValueError("No candidates provided for training")
-        
-        # Prepare features
-        features = compute_advanced_features(bars)
-        
-        # Split by entry level if available
-        if 'entry_level' in candidates.columns:
-            level_candidates = {
-                level: candidates[candidates['entry_level'] == level]
-                for level in self.entry_levels.keys()
-            }
-        else:
-            # If no entry level in candidates, treat all as medium
-            level_candidates = {
-                "medium": candidates,
-                "shallow": candidates.sample(frac=0.7, random_state=42),
-                "deep": candidates.sample(frac=0.7, random_state=24)
-            }
+    for level, cands in level_candidates.items():
+        if cands.empty:
+            logger.warning(f"No candidates for entry level: {level}")
+            continue
             
-        # Process each entry level
-        for level, cands in level_candidates.items():
-            if cands.empty:
-                logger.warning(f"No candidates for entry level: {level}")
+        indices = []
+        labels = []
+        
+        for _, row in cands.iterrows():
+            try:
+                t = pd.to_datetime(row['candidate_time'])
+                locs = bars.index[bars.index <= t]
+                if len(locs) > 0:
+                    idx = bars.index.get_loc(locs[-1])
+                    indices.append(idx)
+                    labels.append(int(row.get('label', 0)))
+            except Exception as e:
                 continue
-                
-            # Extract labeled events from candidates
-            indices = []
-            labels = []
-            
-            for _, row in cands.iterrows():
-                try:
-                    # Find the index in bars that corresponds to candidate time
-                    t = pd.to_datetime(row['candidate_time'])
-                    locs = bars.index[bars.index <= t]
-                    if len(locs) > 0:
-                        idx = bars.index.get_loc(locs[-1])
-                        indices.append(idx)
-                        labels.append(int(row.get('label', 0)))
-                except Exception as e:
-                    continue
-            
-            if not indices:
-                logger.warning(f"No valid indices for level: {level}")
-                continue
-                
-            # Convert to numpy arrays
-            indices = np.array(indices)
-            labels = np.array(labels)
-            
-            # Time series split to prevent lookahead bias
-            ts_split = TimeSeriesSplit(n_splits=5, test_size=int(len(indices) * val_size))
-            for train_idx, test_idx in ts_split.split(indices):
-                train_indices = indices[train_idx]
-                val_indices = indices[test_idx]
-                
-                y_train = labels[train_idx]
-                y_val = labels[test_idx]
-                
-                # Prepare sequence features
-                X_seq = self._to_sequences(features.values, indices)
-                X_seq_train = X_seq[train_idx]
-                X_seq_val = X_seq[test_idx]
-                
-                # Standardize sequences
-                X_seq_flat = X_seq.reshape(-1, X_seq.shape[2])
-                self.scaler_seq.fit(X_seq_flat)
-                
-                X_seq_train_std = self.scaler_seq.transform(X_seq_train.reshape(-1, X_seq_train.shape[2]))
-                X_seq_train_std = X_seq_train_std.reshape(X_seq_train.shape)
-                
-                X_seq_val_std = self.scaler_seq.transform(X_seq_val.reshape(-1, X_seq_val.shape[2]))
-                X_seq_val_std = X_seq_val_std.reshape(X_seq_val.shape)
-                
-                # Train different model types for this entry level
-                for model_type in self.model_types:
-                    if model_type == 'cnn':
-                        if torch is None:
-                            logger.warning("PyTorch not available, skipping CNN")
-                            continue
-                            
-                        # Prepare PyTorch dataset
-                        class SeqDataset(Dataset):
-                            def __init__(self, X, y):
-                                self.X = torch.tensor(X, dtype=torch.float32).transpose(1, 2)
-                                self.y = torch.tensor(y.reshape(-1, 1), dtype=torch.float32)
-                                
-                            def __len__(self):
-                                return len(self.X)
-                                
-                            def __getitem__(self, idx):
-                                return self.X[idx], self.y[idx]
-                        
-                        train_ds = SeqDataset(X_seq_train_std, y_train)
-                        val_ds = SeqDataset(X_seq_val_std, y_val)
-                        
-                        # Create and train model
-                        model = self._create_model('cnn', X_seq_train.shape[2], level)
-                        model, metrics = self._train_torch_model(
-                            model, train_ds, val_ds, 
-                            epochs=epochs_cnn, patience=5
-                        )
-                        
-                    else:  # Tree-based models
-                        # Flatten sequences for tree models
-                        X_train_flat = X_seq_train_std.reshape(X_seq_train_std.shape[0], -1)
-                        X_val_flat = X_seq_val_std.reshape(X_seq_val_std.shape[0], -1)
-                        
-                        # Create and train model
-                        model = self._create_model(model_type, X_train_flat.shape[1], level)
-                        model, metrics = self._train_tree_model(
-                            model, X_train_flat, y_train, X_val_flat, y_val
-                        )
-                
-                    # Store model and metrics
-                    self.models[level].append((model_type, model))
-                    self.model_metrics[level].append(metrics)
-                    
-                # Only use the last split
-                break
-                
-        self._fitted = True
         
-        # Parameter sweep if requested
-        if parameter_sweep:
-            self.run_parameter_sweep(bars, candidates)
+        if not indices:
+            logger.warning(f"No valid indices for level: {level}")
+            continue
             
-        return self
-
-# =============================================================================
-# CHUNK 4: Pipeline, Optimization, and Main Execution
-# =============================================================================
-
-# PropFirmModelEnsemble methods continued
-    def run_parameter_sweep(self, bars: pd.DataFrame, candidates: pd.DataFrame):
-        """Run hyperparameter sweep to find optimal thresholds"""
-        param_grid = {
-            'shallow_threshold': [0.25, 0.3, 0.35, 0.4, 0.45],
-            'medium_threshold': [0.45, 0.5, 0.55, 0.6, 0.65],
-            'deep_threshold': [0.65, 0.7, 0.75, 0.8, 0.85],
-            'vol_sensitivity': [0.2, 0.3, 0.4, 0.5, 0.6],
-            'rr_min': [1.1, 1.3, 1.5, 1.8],
-            'rr_max': [2.5, 3.0, 3.5, 4.0, 5.0],
-        }
+        indices = np.array(indices)
+        labels = np.array(labels)
         
-        if hp is None or fmin is None or tpe is None:
-            logger.warning("hyperopt not available, skipping parameter sweep")
-            return
+        ts_split = TimeSeriesSplit(n_splits=5, test_size=int(len(indices) * val_size))
+        for train_idx, test_idx in ts_split.split(indices):
+            train_indices = indices[train_idx]
+            val_indices = indices[test_idx]
             
-        # Define the search space
-        space = {
-            'shallow_threshold': hp.choice('shallow_threshold', param_grid['shallow_threshold']),
-            'medium_threshold': hp.choice('medium_threshold', param_grid['medium_threshold']),
-            'deep_threshold': hp.choice('deep_threshold', param_grid['deep_threshold']),
-            'vol_sensitivity': hp.choice('vol_sensitivity', param_grid['vol_sensitivity']),
-            'rr_min': hp.choice('rr_min', param_grid['rr_min']),
-            'rr_max': hp.choice('rr_max', param_grid['rr_max']),
-        }
-        
-        # Define the objective function
-        def objective(params):
-            # Create entry threshold system with these params
-            threshold_system = MultiLevelEntryThreshold(
-                shallow_threshold=params['shallow_threshold'],
-                medium_threshold=params['medium_threshold'],
-                deep_threshold=params['deep_threshold'],
-                vol_sensitivity=params['vol_sensitivity'],
-            )
+            y_train = labels[train_idx]
+            y_val = labels[test_idx]
             
-            # Create a small feature set for volatility adjustment
-            features = pd.DataFrame(index=bars.index)
-            features['volatility'] = bars['close'].pct_change().rolling(20).std().fillna(0)
+            X_seq = self._to_sequences(features.values, indices)
+            X_seq_train = X_seq[train_idx]
+            X_seq_val = X_seq[test_idx]
             
-            # Generate entries with these parameters
-            preds = self.predict_proba(bars)
-            if preds.empty:
-                return {'loss': float('inf'), 'status': STATUS_OK}
-                
-            preds['timestamp'] = bars.index[preds['t'].astype(int).values]
-            preds['close'] = bars['close'].values[preds['t'].astype(int).values]
-            preds['atr_pct'] = 0.01  # Placeholder, would come from bars
+            X_seq_flat = X_seq.reshape(-1, X_seq.shape[2])
+            self.scaler_seq.fit(X_seq_flat)
             
-            # Evaluate entries - use a sample to speed up
-            entries_sample = threshold_system.evaluate_entries(
-                preds.sample(min(1000, len(preds)), random_state=42),
-                signal_col='p3',
-                base_risk=0.01,
-                model_winrate=0.55  # Midpoint estimate
-            )
+            X_seq_train_std = self.scaler_seq.transform(X_seq_train.reshape(-1, X_seq_train.shape[2]))
+            X_seq_train_std = X_seq_train_std.reshape(X_seq_train.shape)
             
-            if entries_sample.empty:
-                return {'loss': float('inf'), 'status': STATUS_OK}
-                
-            # Calculate risk-adjusted score
-            # We want more approved trades with higher expected value
-            n_approved = entries_sample['approved'].sum()
-            expected_value = entries_sample[entries_sample['approved']]['rr_ratio'].mean() * 0.55
+            X_seq_val_std = self.scaler_seq.transform(X_seq_val.reshape(-1, X_seq_val.shape[2]))
+            X_seq_val_std = X_seq_val_std.reshape(X_seq_val.shape)
             
-            if n_approved == 0 or math.isnan(expected_value):
-                return {'loss': float('inf'), 'status': STATUS_OK}
-                
-            # Loss is negative of risk-adjusted reward
-            loss = -1 * (n_approved/len(entries_sample)) * expected_value
-            
-            return {
-                'loss': loss,
-                'n_approved': n_approved,
-                'expected_value': expected_value,
-                'status': STATUS_OK
-            }
-            
-        # Run optimization
-        trials = Trials()
-        best = fmin(
-            fn=objective,
-            space=space,
-            algo=tpe.suggest,
-            max_evals=25,
-            trials=trials
-        )
-        
-        # Store best parameters
-        self.best_params = {
-            'shallow_threshold': param_grid['shallow_threshold'][best['shallow_threshold']],
-            'medium_threshold': param_grid['medium_threshold'][best['medium_threshold']],
-            'deep_threshold': param_grid['deep_threshold'][best['deep_threshold']],
-            'vol_sensitivity': param_grid['vol_sensitivity'][best['vol_sensitivity']],
-            'rr_min': param_grid['rr_min'][best['rr_min']],
-            'rr_max': param_grid['rr_max'][best['rr_max']],
-        }
-        
-        logger.info(f"Best params from sweep: {self.best_params}")
-        return self.best_params
-        
-    def _get_model_winrate(self, level: str) -> float:
-        """Get the estimated winrate for a specific level's models"""
-        if not self.model_metrics[level]:
-            return 0.5  # Default midpoint
-            
-        # Get average AUC and convert to approximate winrate
-        avg_auc = np.mean([m.get('val_auc', 0.5) for m in self.model_metrics[level]])
-        # Convert AUC to approximate winrate (rough heuristic)
-        winrate = 0.5 + (avg_auc - 0.5) * 0.5
-        return min(max(winrate, 0.4), 0.7)  # Clip to reasonable range
-        
-    def predict_proba(self, bars: pd.DataFrame, threshold: float = 0.0) -> pd.DataFrame:
-        """
-        Generate predictions for all potential entry points
-        
-        Returns:
-            DataFrame with prediction probabilities for each entry level
-        """
-        if not self._fitted:
-            raise ValueError("Models not fitted yet")
-            
-        # Create feature matrix
-        features = compute_advanced_features(bars)
-        
-        # All possible indices
-        indices = np.arange(self.seq_len, len(bars))
-        
-        # Prepare sequences
-        X_seq = self._to_sequences(features.values, indices)
-        X_seq_std = self.scaler_seq.transform(X_seq.reshape(-1, X_seq.shape[2]))
-        X_seq_std = X_seq_std.reshape(X_seq.shape)
-        
-        # Initialize prediction arrays
-        shallow_preds = np.zeros(len(indices))
-        medium_preds = np.zeros(len(indices))
-        deep_preds = np.zeros(len(indices))
-        
-        # Generate predictions from each model and ensemble
-        for level, models in self.models.items():
-            preds_list = []
-            
-            for model_type, model in models:
+            for model_type in self.model_types:
                 if model_type == 'cnn':
-                    # PyTorch prediction
-                    model.eval()
-                    batch_size = 256
-                    level_preds = []
+                    if torch is None:
+                        logger.warning("PyTorch not available, skipping CNN")
+                        continue
+
+                     
+                    class SeqDataset(Dataset):
+                        def __init__(self, X, y):
+                            self.X = torch.tensor(X, dtype=torch.float32).transpose(1, 2)
+                            self.y = torch.tensor(y.reshape(-1, 1), dtype=torch.float32)
+                            
+                        def __len__(self):
+                            return len(self.X)
+                            
+                        def __getitem__(self, idx):
+                            return self.X[idx], self.y[idx]
                     
-                    with torch.no_grad():
-                        for i in range(0, len(X_seq_std), batch_size):
-                            batch = X_seq_std[i:i+batch_size]
-                            x_batch = torch.tensor(batch, dtype=torch.float32).transpose(1, 2)
-                            x_batch = x_batch.to(self.device)
-                            outputs = model(x_batch)
-                            
-                            # Use the level-specific output
-                            logits = outputs.get(level, outputs.get("shared"))
-                            probs = torch.sigmoid(logits).cpu().numpy().flatten()
-                            level_preds.append(probs)
-                            
-                    level_preds = np.concatenate(level_preds)
+                    train_ds = SeqDataset(X_seq_train_std, y_train)
+                    val_ds = SeqDataset(X_seq_val_std, y_val)
+                    
+                    model = self._create_model('cnn', X_seq_train.shape[2], level)
+                    model, metrics = self._train_torch_model(
+                        model, train_ds, val_ds, 
+                        epochs=epochs_cnn, patience=5
+                    )
                     
                 else:
-                    # Tree model prediction
-                    X_flat = X_seq_std.reshape(X_seq_std.shape[0], -1)
-                    level_preds = model.predict_proba(X_flat)[:, 1]
+                    X_train_flat = X_seq_train_std.reshape(X_seq_train_std.shape[0], -1)
+                    X_val_flat = X_seq_val_std.reshape(X_seq_val_std.shape[0], -1)
+                    
+                    model = self._create_model(model_type, X_train_flat.shape[1], level)
+                    model, metrics = self._train_tree_model(
+                        model, X_train_flat, y_train, X_val_flat, y_val
+                    )
+            
+                self.models[level].append((model_type, model))
+                self.model_metrics[level].append(metrics)
                 
-                preds_list.append(level_preds)
+            break
             
-            # Ensemble predictions (average)
-            ensemble_preds = np.mean(preds_list, axis=0) if preds_list else np.zeros(len(indices))
+    self._fitted = True
+    
+    if parameter_sweep:
+        self.run_parameter_sweep(bars, candidates)
+        
+    return self
+
+def run_parameter_sweep(self, bars: pd.DataFrame, candidates: pd.DataFrame):
+    """Run hyperparameter optimization for entry thresholds and RR parameters"""
+    param_grid = {
+        'shallow_threshold': [0.25, 0.3, 0.35, 0.4, 0.45],
+        'medium_threshold': [0.45, 0.5, 0.55, 0.6, 0.65],
+        'deep_threshold': [0.65, 0.7, 0.75, 0.8, 0.85],
+        'vol_sensitivity': [0.2, 0.3, 0.4, 0.5, 0.6],
+        'rr_min': [1.1, 1.3, 1.5, 1.8],
+        'rr_max': [2.5, 3.0, 3.5, 4.0, 5.0],
+    }
+    
+    if hp is None or fmin is None or tpe is None:
+        logger.warning("hyperopt not available, skipping parameter sweep")
+        return
+        
+    space = {
+        'shallow_threshold': hp.choice('shallow_threshold', param_grid['shallow_threshold']),
+        'medium_threshold': hp.choice('medium_threshold', param_grid['medium_threshold']),
+        'deep_threshold': hp.choice('deep_threshold', param_grid['deep_threshold']),
+        'vol_sensitivity': hp.choice('vol_sensitivity', param_grid['vol_sensitivity']),
+        'rr_min': hp.choice('rr_min', param_grid['rr_min']),
+        'rr_max': hp.choice('rr_max', param_grid['rr_max']),
+    }
+    
+    def objective(params):
+        threshold_system = MultiLevelEntryThreshold(
+            shallow_threshold=params['shallow_threshold'],
+            medium_threshold=params['medium_threshold'],
+            deep_threshold=params['deep_threshold'],
+            vol_sensitivity=params['vol_sensitivity'],
+        )
+        
+        features = pd.DataFrame(index=bars.index)
+        features['volatility'] = bars['close'].pct_change().rolling(20).std().fillna(0)
+        
+        preds = self.predict_proba(bars)
+        if preds.empty:
+            return {'loss': float('inf'), 'status': STATUS_OK}
             
-            # Store predictions for each level
-            if level == 'shallow':
-                shallow_preds = ensemble_preds
-            elif level == 'medium':
-                medium_preds = ensemble_preds
-            elif level == 'deep':
-                deep_preds = ensemble_preds
+        preds['timestamp'] = bars.index[preds['t'].astype(int).values]
+        preds['close'] = bars['close'].values[preds['t'].astype(int).values]
+        preds['atr_pct'] = 0.01
         
-        # Combine predictions for final signal
-        # We scale by 10 to match expected signal range (0-10)
-        combined_signal = (shallow_preds * 0.2 + medium_preds * 0.5 + deep_preds * 0.3) * 10
+        entries_sample = threshold_system.evaluate_entries(
+            preds.sample(min(1000, len(preds)), random_state=42),
+            signal_col='p3',
+            base_risk=0.01,
+            model_winrate=0.55
+        )
         
-        # Filter by threshold
-        mask = combined_signal > threshold
+        if entries_sample.empty:
+            return {'loss': float('inf'), 'status': STATUS_OK}
+            
+        n_approved = entries_sample['approved'].sum()
+        expected_value = entries_sample[entries_sample['approved']]['rr_ratio'].mean() * 0.55
         
-        # Create result dataframe
-        result = pd.DataFrame({
-            't': indices[mask],
-            'p1': shallow_preds[mask],
-            'p2': medium_preds[mask],
-            'p3': combined_signal[mask] / 10.0,  # Normalize back to 0-1 range
-            'shallow': shallow_preds[mask],
-            'medium': medium_preds[mask],
-            'deep': deep_preds[mask]
-        })
+        if n_approved == 0 or math.isnan(expected_value):
+            return {'loss': float('inf'), 'status': STATUS_OK}
+            
+        loss = -1 * (n_approved/len(entries_sample)) * expected_value
         
-        return result
+        return {
+            'loss': loss,
+            'n_approved': n_approved,
+            'expected_value': expected_value,
+            'status': STATUS_OK
+        }
         
+    trials = Trials()
+    best = fmin(
+        fn=objective,
+        space=space,
+        algo=tpe.suggest,
+        max_evals=25,
+        trials=trials
+    )
+    
+    self.best_params = {
+        'shallow_threshold': param_grid['shallow_threshold'][best['shallow_threshold']],
+        'medium_threshold': param_grid['medium_threshold'][best['medium_threshold']],
+        'deep_threshold': param_grid['deep_threshold'][best['deep_threshold']],
+        'vol_sensitivity': param_grid['vol_sensitivity'][best['vol_sensitivity']],
+        'rr_min': param_grid['rr_min'][best['rr_min']],
+        'rr_max': param_grid['rr_max'][best['rr_max']],
+    }
+    
+    logger.info(f"Best params from sweep: {self.best_params}")
+    return self.best_params
+    
+def _get_model_winrate(self, level: str) -> float:
+    """Estimate model winrate based on validation AUC"""
+    if not self.model_metrics[level]:
+        return 0.5
+        
+    avg_auc = np.mean([m.get('val_auc', 0.5) for m in self.model_metrics[level]])
+    winrate = 0.5 + (avg_auc - 0.5) * 0.5
+    return min(max(winrate, 0.4), 0.7)
+    
+def predict_proba(self, bars: pd.DataFrame, threshold: float = 0.0) -> pd.DataFrame:
+    """Generate predictions from the ensemble model"""
+    if not self._fitted:
+        raise ValueError("Models not fitted yet")
+        
+    features = compute_advanced_features(bars)
+    
+    indices = np.arange(self.seq_len, len(bars))
+    
+    X_seq = self._to_sequences(features.values, indices)
+    X_seq_std = self.scaler_seq.transform(X_seq.reshape(-1, X_seq.shape[2]))
+    X_seq_std = X_seq_std.reshape(X_seq.shape)
+    
+    shallow_preds = np.zeros(len(indices))
+    medium_preds = np.zeros(len(indices))
+    deep_preds = np.zeros(len(indices))
+    
+    for level, models in self.models.items():
+        preds_list = []
+        
+        for model_type, model in models:
+            if model_type == 'cnn':
+                model.eval()
+                batch_size = 256
+                level_preds = []
+                
+                with torch.no_grad():
+                    for i in range(0, len(X_seq_std), batch_size):
+                        batch = X_seq_std[i:i+batch_size]
+                        x_batch = torch.tensor(batch, dtype=torch.float32).transpose(1, 2)
+                        x_batch = x_batch.to(self.device)
+                        outputs = model(x_batch)
+                        
+                        logits = outputs.get(level, outputs.get("shared"))
+                        probs = torch.sigmoid(logits).cpu().numpy().flatten()
+                        level_preds.append(probs)
+                        
+                level_preds = np.concatenate(level_preds)
+                
+            else:
+                X_flat = X_seq_std.reshape(X_seq_std.shape[0], -1)
+                level_preds = model.predict_proba(X_flat)[:, 1]
+            
+            preds_list.append(level_preds)
+        
+        ensemble_preds = np.mean(preds_list, axis=0) if preds_list else np.zeros(len(indices))
+        
+        if level == 'shallow':
+            shallow_preds = ensemble_preds
+        elif level == 'medium':
+            medium_preds = ensemble_preds
+        elif level == 'deep':
+            deep_preds = ensemble_preds
+    
+    combined_signal = (shallow_preds * 0.2 + medium_preds * 0.5 + deep_preds * 0.3) * 10
+    
+    mask = combined_signal > threshold
+    
+    result = pd.DataFrame({
+        't': indices[mask],
+        'p1': shallow_preds[mask],
+        'p2': medium_preds[mask],
+        'p3': combined_signal[mask] / 10.0,
+        'shallow': shallow_preds[mask],
+        'medium': medium_preds[mask],
+        'deep': deep_preds[mask]
+    })
+    
+    return result
+
+
     def get_optimal_entry_config(self) -> Dict[str, Dict[str, Any]]:
-        """Get optimal entry configuration based on model performance"""
+        """Get optimized entry configuration based on model performance"""
         config = {}
         
         for level in self.entry_levels.keys():
             winrate = self._get_model_winrate(level)
             
-            # Start with base entry level parameters
             params = dict(ENTRY_LEVELS[level])
             
-            # Adjust based on winrate
-            if winrate >= 0.6:  # High winrate model
-                # For high winrate, we can be more aggressive with entries
-                params["confidence_threshold"] *= 0.9  # Lower threshold
-                params["risk_adjustment"] *= 1.2  # More risk (still within prop firm limits)
+            if winrate >= 0.6:
+                params["confidence_threshold"] *= 0.9
+                params["risk_adjustment"] *= 1.2
                 rr_cat = "high_winrate"
-            elif winrate >= 0.5:  # Medium winrate
-                # Keep defaults
+            elif winrate >= 0.5:
                 rr_cat = "medium_winrate"
-            else:  # Low winrate
-                # More conservative
-                params["confidence_threshold"] *= 1.1  # Higher threshold
-                params["risk_adjustment"] *= 0.8  # Less risk per trade
+            else:
+                params["confidence_threshold"] *= 1.1
+                params["risk_adjustment"] *= 0.8
                 rr_cat = "low_winrate"
                 
-            # Set RR range
             params["rr_percentile_low"] = ADAPTIVE_RR_CONFIG[rr_cat]["percentile_low"]
             params["rr_percentile_high"] = ADAPTIVE_RR_CONFIG[rr_cat]["percentile_high"]
             params["estimated_winrate"] = winrate
@@ -1392,36 +1309,28 @@ class PropFirmModelEnsemble:
             config[level] = params
             
         return config
-        
+
     def evaluate_performance(
         self, 
         bars: pd.DataFrame, 
         candidates: pd.DataFrame,
         output_metrics: bool = True
     ) -> Dict[str, Any]:
-        """
-        Evaluate model performance on candidates
-        
-        Returns dictionary with performance metrics and visualizations
-        """
-        # Generate predictions
+        """Evaluate model performance on candidate signals"""
         preds = self.predict_proba(bars)
         
         if preds.empty or candidates.empty:
             return {"error": "No predictions or candidates available"}
         
-        # Match predictions to candidates
         cand_times = pd.to_datetime(candidates['candidate_time'])
         pred_times = bars.index[preds['t'].astype(int).values]
         
-        # Map predictions to candidates (nearest time match)
         merged_results = []
         
         for idx, row in candidates.iterrows():
             t = pd.to_datetime(row['candidate_time'])
-            # Find closest prediction time
             time_diffs = np.abs((pred_times - t).total_seconds())
-            if len(time_diffs) > 0 and np.min(time_diffs) < 86400:  # Within 1 day
+            if len(time_diffs) > 0 and np.min(time_diffs) < 86400:
                 closest_idx = np.argmin(time_diffs)
                 merged_row = {**row.to_dict(), **preds.iloc[closest_idx].to_dict()}
                 merged_results.append(merged_row)
@@ -1431,17 +1340,14 @@ class PropFirmModelEnsemble:
             
         merged_df = pd.DataFrame(merged_results)
         
-        # Calculate performance metrics
         metrics = {}
         
-        # Use p3 for signal strength
         thresholds = np.linspace(0.3, 0.9, 10)
         
         for thresh in thresholds:
             pred_labels = (merged_df['p3'] >= thresh).astype(int)
             true_labels = merged_df['label'].astype(int)
             
-            # Count trades and win rate
             n_trades = (pred_labels == 1).sum()
             if n_trades > 0:
                 win_rate = (pred_labels & true_labels).sum() / n_trades
@@ -1457,12 +1363,10 @@ class PropFirmModelEnsemble:
                 "expected_value": float(win_rate * avg_return - (1-win_rate) * 0.01)
             }
             
-        # Analyze by entry level
         if 'entry_level' in merged_df.columns:
             for level in merged_df['entry_level'].unique():
                 level_df = merged_df[merged_df['entry_level'] == level]
                 
-                # Get optimal threshold
                 best_expected_value = -np.inf
                 best_threshold = 0.5
                 
@@ -1486,7 +1390,6 @@ class PropFirmModelEnsemble:
                     "n_samples": int(len(level_df))
                 }
         
-        # Overall metrics
         precision, recall, thresholds_pr = precision_recall_curve(
             merged_df['label'].astype(int), 
             merged_df['p3']
@@ -1499,54 +1402,42 @@ class PropFirmModelEnsemble:
             "n_candidates": int(len(merged_df))
         }
         
-        # Performance distribution
         performance_metrics = {
             "thresholds": metrics,
             "entry_configs": self.get_optimal_entry_config(),
         }
         
-        # Add parameter suggestions if best_params exists
         if hasattr(self, 'best_params'):
             performance_metrics["param_suggestions"] = self.best_params
             
         return performance_metrics
         
     def suggest_parameter_adjustments(self, performance_metrics: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Analyze performance metrics and suggest parameter adjustments
-        
-        This can be extended to use an LLM if available
-        """
+        """Suggest parameter adjustments based on performance analysis"""
         suggestions = {}
         
-        # Basic heuristic-based suggestions
         overall_metrics = performance_metrics.get("thresholds", {}).get("overall", {})
         model_winrate = overall_metrics.get("model_winrate", 0.5)
         
         if model_winrate >= 0.6:
-            # High winrate model
             suggestions["confidence"] = "High winrate detected. Consider lowering entry thresholds and using more trades."
             suggestions["threshold_adjustment"] = "Decrease by 5-10%"
             suggestions["position_sizing"] = "Can increase base risk slightly"
             suggestions["rr_profile"] = "conservative"
         elif model_winrate >= 0.5:
-            # Medium winrate
             suggestions["confidence"] = "Medium winrate detected. Use balanced approach."
             suggestions["threshold_adjustment"] = "Keep current thresholds"
             suggestions["position_sizing"] = "Maintain standard position sizing"
             suggestions["rr_profile"] = "balanced"
         else:
-            # Low winrate
             suggestions["confidence"] = "Lower winrate detected. Consider raising thresholds and focusing on quality over quantity."
             suggestions["threshold_adjustment"] = "Increase by 5-10%"
             suggestions["position_sizing"] = "Reduce base risk by 20-30%"
             suggestions["rr_profile"] = "aggressive"
             
-        # Use best params from sweep if available
         if "param_suggestions" in performance_metrics:
             suggestions["recommended_params"] = performance_metrics["param_suggestions"]
             
-        # Try to get LLM advice if available
         if InferenceClient is not None and HF_TOKEN:
             try:
                 client = InferenceClient(token=HF_TOKEN)
@@ -1575,15 +1466,9 @@ class PropFirmModelEnsemble:
                 
         return suggestions
 
-# ---- PropFirmPipeline ----
 class PropFirmPipeline:
     """
-    Full trading model pipeline specialized for prop firm challenges
-    - Data fetching, preprocessing, feature engineering
-    - Multi-model training with specialized entry levels
-    - Parameter optimization
-    - Metrics logging and visualization
-    - Model export and deployment
+    Complete pipeline for prop firm trading model training and evaluation
     """
     def __init__(
         self,
@@ -1592,7 +1477,7 @@ class PropFirmPipeline:
         start_date: datetime,
         end_date: datetime,
         max_drawdown_pct: float = 2.0,
-        data_source: str = 'finnage',  # 'finnage', 'yahoo', or 'both'
+        data_source: str = 'finnage',
         base_risk: float = 0.01,
         rr_profile: str = 'balanced',
         device: str = 'auto'
@@ -1613,7 +1498,7 @@ class PropFirmPipeline:
         self.performance_metrics = {}
         
     def fetch_data(self) -> Dict[str, pd.DataFrame]:
-        """Fetch data for all tickers in the asset group"""
+        """Fetch market data for all tickers"""
         logger.info(f"Fetching data for {len(self.tickers)} tickers in {self.asset_group}")
         
         all_bars = {}
@@ -1621,12 +1506,10 @@ class PropFirmPipeline:
         for sym in self.tickers:
             logger.info(f"Fetching {sym}")
             
-            # Determine Finnage symbol if available
             fin_map = MARKET_SYMBOLS_MAP.get(self.asset_group, {}).get(sym)
             df_finnage = pd.DataFrame()
             df_yahoo = pd.DataFrame()
             
-            # Fetch from Finnage if symbol mapping exists and data source includes Finnage
             if fin_map and (self.data_source in ['finnage', 'both']):
                 df_finnage = self._fetch_finnage_bars(
                     fin_map, 
@@ -1634,7 +1517,6 @@ class PropFirmPipeline:
                     datetime.combine(self.end_date, datetime.min.time())
                 )
                 
-            # Fetch from Yahoo if data source includes Yahoo
             if self.data_source in ['yahoo', 'both']:
                 df_yahoo = self._fetch_yahoo_bars(
                     sym, 
@@ -1642,12 +1524,10 @@ class PropFirmPipeline:
                     datetime.combine(self.end_date, datetime.min.time())
                 )
                 
-            # Combine data, preferring Finnage
             if not df_finnage.empty:
                 if df_yahoo.empty:
                     df = df_finnage
                 else:
-                    # Combine, prioritize Finnage
                     df = pd.concat([df_finnage, df_yahoo]).sort_index().drop_duplicates(keep='first')
             else:
                 df = df_yahoo
@@ -1656,7 +1536,6 @@ class PropFirmPipeline:
                 logger.warning(f"No data for {sym}")
                 continue
                 
-            # Normalize and clean data
             df.index = pd.to_datetime(df.index).tz_localize(None) if hasattr(df.index, 'tz') else pd.to_datetime(df.index)
             
             for col in ('open', 'high', 'low', 'close', 'volume'):
@@ -1674,25 +1553,42 @@ class PropFirmPipeline:
         return all_bars
             
     def _fetch_finnage_bars(self, symbol: str, start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
-        """Fetch data from Finnage API"""
+        """Fetch bars data from Finnage API"""
         if not FINNAGE_API_KEY:
             logger.warning("FINNAGE_API_KEY not set; skipping Finnage fetch")
             return pd.DataFrame()
             
         try:
+            logger.info(f"Fetching {symbol} from Finnage")
+            
+            api_key_masked = FINNAGE_API_KEY[:5] + "..." + FINNAGE_API_KEY[-5:] if len(FINNAGE_API_KEY) > 10 else "***"
+            logger.debug(f"Using API key starting with {api_key_masked}")
+            
             url = (
                 "https://finnhub.io/api/v1/stock/candle"
                 f"?symbol={symbol}&resolution=D&from={int(start_dt.timestamp())}"
                 f"&to={int(end_dt.timestamp())}&token={FINNAGE_API_KEY}"
             )
             
-            logger.debug(f"Finnage URL: {url}")
             resp = requests.get(url, timeout=25)
+            
+            if resp.status_code == 401:
+                logger.error(f"Unauthorized: API key invalid for {symbol}")
+                return pd.DataFrame()
+            elif resp.status_code == 429:
+                logger.error(f"Rate limit exceeded for {symbol}")
+                import time
+                time.sleep(1.0)
+                return pd.DataFrame()
+            elif resp.status_code == 404:
+                logger.warning(f"Symbol {symbol} not found on Finnage")
+                return pd.DataFrame()
+                
             resp.raise_for_status()
             data = resp.json()
             
             if data.get('s') != 'ok':
-                logger.debug(f"Finnage returned s={data.get('s')} for {symbol}")
+                logger.warning(f"Finnage returned s={data.get('s')} for {symbol}")
                 return pd.DataFrame()
                 
             ts = [datetime.fromtimestamp(int(t), tz=UTC) for t in data['t']]
@@ -1707,12 +1603,18 @@ class PropFirmPipeline:
             df.index = df.index.tz_localize(None)
             return df
             
+        except requests.exceptions.Timeout:
+            logger.error(f"Finnage API timeout for {symbol}")
+            return pd.DataFrame()
+        except requests.exceptions.ConnectionError:
+            logger.error(f"Finnage API connection error for {symbol}")
+            return pd.DataFrame()
         except Exception as e:
             logger.exception(f"Finnage fetch error for {symbol}: {e}")
             return pd.DataFrame()
             
     def _fetch_yahoo_bars(self, symbol: str, start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
-        """Fetch data from Yahoo Finance"""
+        """Fetch bars data from Yahoo Finance"""
         if YahooTicker is None:
             logger.warning("yahooquery not installed; cannot fetch Yahoo data")
             return pd.DataFrame()
@@ -1741,14 +1643,13 @@ class PropFirmPipeline:
             return pd.DataFrame()
             
     def generate_candidates(self) -> Dict[str, pd.DataFrame]:
-        """Generate labeled candidates for each ticker"""
+        """Generate trading candidates for all symbols"""
         if not self.bars_data:
             raise ValueError("No data available. Call fetch_data() first.")
             
         all_candidates = {}
         
         for sym, bars in self.bars_data.items():
-            # Generate candidates with multiple entry levels
             cands = generate_signal_candidates(
                 bars,
                 lookback=64,
@@ -1758,7 +1659,7 @@ class PropFirmPipeline:
                 max_bars=100,
                 direction="long",
                 entry_levels=ENTRY_LEVELS,
-                model_winrate=0.5  # Default for initial generation
+                model_winrate=0.5
             )
             
             if cands is None or cands.empty:
@@ -1771,636 +1672,35 @@ class PropFirmPipeline:
             
         self.candidates = all_candidates
         return all_candidates
-        
-    def train_models(
-        self,
-        ensemble_size: int = 3,
-        model_types: List[str] = None,
-        parameter_sweep: bool = True,
-        epochs_cnn: int = 20
-    ) -> Dict[str, PropFirmModelEnsemble]:
-        """Train specialized models for each asset in the group"""
-        if not self.bars_data or not self.candidates:
-            raise ValueError("Missing data or candidates. Call fetch_data() and generate_candidates() first.")
-            
-        if model_types is None:
-            model_types = ['cnn', 'xgboost'] if xgb is not None else ['cnn']
-            
-        # Create models for each ticker
-        trained_models = {}
-        
-        for sym, bars in self.bars_data.items():
-            if sym not in self.candidates:
-                logger.warning(f"No candidates for {sym}, skipping model training")
-                continue
-                
-            cands = self.candidates[sym]
-            
-            if cands.empty:
-                logger.warning(f"Empty candidates for {sym}, skipping model training")
-                continue
-                
-            logger.info(f"Training models for {sym}")
-            
-            # Create and train the ensemble
-            model = PropFirmModelEnsemble(
-                seq_len=64,
-                feat_windows=(5, 10, 20, 40, 60),
-                ensemble_size=ensemble_size,
-                model_types=model_types,
-                device=self.device,
-                max_drawdown_pct=self.max_drawdown_pct
-            )
-            
-            try:
-                model.fit(
-                    bars,
-                    cands,
-                    epochs_cnn=epochs_cnn,
-                    parameter_sweep=parameter_sweep
-                )
-                
-                trained_models[sym] = model
-                logger.info(f"Successfully trained models for {sym}")
-                
-            except Exception as e:
-                logger.exception(f"Error training models for {sym}: {e}")
-                
-        self.models = trained_models
-        return trained_models
-        
-    def evaluate_models(self) -> Dict[str, Dict[str, Any]]:
-        """Evaluate all trained models"""
-        if not self.models:
-            raise ValueError("No trained models. Call train_models() first.")
-            
-        all_metrics = {}
-        
-        for sym, model in self.models.items():
-            logger.info(f"Evaluating model for {sym}")
-            
-            try:
-                metrics = model.evaluate_performance(
-                    self.bars_data[sym], 
-                    self.candidates[sym]
-                )
-                
-                # Get parameter suggestions
-                suggestions = model.suggest_parameter_adjustments(metrics)
-                metrics['parameter_suggestions'] = suggestions
-                
-                all_metrics[sym] = metrics
-                logger.info(f"Evaluation complete for {sym}")
-                
-            except Exception as e:
-                logger.exception(f"Error evaluating model for {sym}: {e}")
-                all_metrics[sym] = {"error": str(e)}
-                
-        self.performance_metrics = all_metrics
-        return all_metrics
-        
-    def optimize_parameters(self) -> Dict[str, Dict[str, Any]]:
-        """Optimize parameters for each model based on performance"""
-        if not self.models or not self.performance_metrics:
-            raise ValueError("Missing models or performance metrics. Call train_models() and evaluate_models() first.")
-            
-        optimized_params = {}
-        
-        for sym, model in self.models.items():
-            logger.info(f"Optimizing parameters for {sym}")
-            
-            try:
-                # Use best parameters from performance metrics if available
-                metrics = self.performance_metrics.get(sym, {})
-                suggestions = metrics.get('parameter_suggestions', {})
-                
-                if 'recommended_params' in suggestions:
-                    params = suggestions['recommended_params']
-                    
-                    # Update model's internal parameters
-                    for key, value in params.items():
-                        if hasattr(model, key):
-                            setattr(model, key, value)
-                            
-                    optimized_params[sym] = params
-                    logger.info(f"Updated parameters for {sym}")
-                    
-            except Exception as e:
-                logger.exception(f"Error optimizing parameters for {sym}: {e}")
-                
-        return optimized_params
-        
-    def export_models(self, output_dir: str = None) -> Dict[str, str]:
-        """Export trained models to files"""
-        if not self.models:
-            raise ValueError("No trained models. Call train_models() first.")
-            
-        if output_dir is None:
-            output_dir = f"prop_firm_models_{self.asset_group}_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
-            
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-        
-        export_paths = {}
-        
-        for sym, model in self.models.items():
-            logger.info(f"Exporting model for {sym}")
-            
-            try:
-                model_path = output_path / f"{sym}_model.pt"
-                
-                if torch is not None:
-                    torch.save(model, str(model_path))
-                    export_paths[sym] = str(model_path)
-                    logger.info(f"Saved model for {sym} to {model_path}")
-                else:
-                    logger.warning(f"Torch not available, cannot save model for {sym}")
-                    
-            except Exception as e:
-                logger.exception(f"Error exporting model for {sym}: {e}")
-                
-        # Export configuration
-        try:
-            config = {
-                'asset_group': self.asset_group,
-                'max_drawdown_pct': self.max_drawdown_pct,
-                'tickers': self.tickers,
-                'start_date': self.start_date.isoformat(),
-                'end_date': self.end_date.isoformat(),
-                'performance_metrics': self.performance_metrics
-            }
-            
-            config_path = output_path / "config.json"
-            with open(config_path, 'w') as f:
-                json.dump(config, f, indent=2, default=str)
-                
-            export_paths['config'] = str(config_path)
-            
-        except Exception as e:
-            logger.exception(f"Error exporting configuration: {e}")
-            
-        return export_paths
-        
-    def upload_to_hf(self, repo_name: str) -> Dict[str, str]:
-        """Upload models to HuggingFace"""
-        if HF_TOKEN is None or HfApi is None or upload_file is None:
-            logger.warning("HF_TOKEN or huggingface_hub not available")
-            return {}
-            
-        exported_paths = self.export_models()
-        upload_urls = {}
-        
-        api = HfApi(token=HF_TOKEN)
-        
-        for sym, path in exported_paths.items():
-            logger.info(f"Uploading {sym} model to HF")
-            
-            try:
-                url = api.upload_file(
-                    path_or_fileobj=path,
-                    path_in_repo=f"{sym}_model.pt" if sym != 'config' else "config.json",
-                    repo_id=repo_name,
-                    repo_type="model"
-                )
-                
-                upload_urls[sym] = url
-                logger.info(f"Uploaded {sym} model to {url}")
-                
-            except Exception as e:
-                logger.exception(f"Error uploading model for {sym}: {e}")
-                
-        return upload_urls
-        
-    def log_metrics(self) -> Dict[str, Any]:
-        """Log model metrics to Supabase"""
-        if not self.performance_metrics:
-            raise ValueError("No performance metrics. Call evaluate_models() first.")
-            
-        if create_client is None:
-            logger.warning("supabase-py not installed; skipping Supabase logging")
-            return {}
-            
-        try:
-            supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        except Exception as e:
-            logger.exception(f"Failed to initialize Supabase client: {e}")
-            return {}
-            
-        correlation_id = str(uuid.uuid4())
-        logger.info(f"Logging metrics to Supabase; correlation_id={correlation_id}")
-        
-        # Prepare metrics
-        ticker_stats = {}
-        
-        for sym, metrics in self.performance_metrics.items():
-            overall = metrics.get('thresholds', {}).get('overall', {})
-            
-            stats = {
-                "num_bars": len(self.bars_data.get(sym, [])),
-                "num_candidates": len(self.candidates.get(sym, [])),
-                "auc": overall.get('auc', float('nan')),
-                "model_winrate": overall.get('model_winrate', float('nan')),
-                "avg_precision": overall.get('avg_precision', float('nan')),
-                "prop_firm_compatible": True
-            }
-            
-            ticker_stats[sym] = stats
-            
-        # Aggregate group metrics
-        group_metrics = {}
-        
-        for metric in ["num_bars", "num_candidates", "auc", "model_winrate", "avg_precision"]:
-            values = [stats.get(metric, float('nan')) for stats in ticker_stats.values()]
-            group_metrics[metric] = float(np.nanmean(values))
-            
-        # Insert per ticker
-        for ticker, stats in ticker_stats.items():
-            row = {
-                "asset_group": self.asset_group,
-                "ticker": ticker,
-                "metrics_json": json.dumps(stats),
-                "num_bars": int(stats.get("num_bars", 0)),
-                "num_candidates": int(stats.get("num_candidates", 0)),
-                "trained_at": datetime.now(UTC).isoformat(),
-                "correlation_id": correlation_id,
-                "prop_firm_mode": True,
-                "max_drawdown": float(self.max_drawdown_pct)
-            }
-            
-            try:
-                supabase.table("model_metrics").insert(row).execute()
-                logger.debug(f"Inserted metrics for {ticker}")
-            except Exception as e:
-                logger.exception(f"Supabase insert error for {ticker}: {e}")
-                
-        # Insert group summary
-        group_row = {
-            "asset_group": self.asset_group,
-            "ticker": None,
-            "metrics_json": json.dumps(group_metrics),
-            "num_bars": int(np.nanmean([v.get("num_bars", 0) for v in ticker_stats.values()])),
-            "num_candidates": int(np.nanmean([v.get("num_candidates", 0) for v in ticker_stats.values()])),
-            "trained_at": datetime.now(UTC).isoformat(),
-            "correlation_id": correlation_id,
-            "prop_firm_mode": True,
-            "max_drawdown": float(self.max_drawdown_pct)
-        }
-        
-        try:
-            supabase.table("model_metrics").insert(group_row).execute()
-            logger.debug("Inserted group aggregate row")
-        except Exception as e:
-            logger.exception(f"Supabase insert failed for group row: {e}")
-            
-        return {"correlation_id": correlation_id, "ticker_stats": ticker_stats}
-        
-    def run_full_pipeline(
-        self,
-        ensemble_size: int = 3,
-        model_types: List[str] = None,
-        parameter_sweep: bool = True,
-        epochs_cnn: int = 20,
-        hf_repo_name: str = None
-    ) -> Dict[str, Any]:
-        """
-        Run the complete pipeline from data fetching to model export
-        
-        Returns dictionary with results from each step
-        """
-        results = {
-            "start_time": datetime.now(UTC).isoformat(),
-            "asset_group": self.asset_group,
-            "tickers": self.tickers
-        }
-        
-        try:
-            # Fetch data
-            logger.info("Fetching data...")
-            bars = self.fetch_data()
-            results["data_fetch"] = {
-                "tickers": list(bars.keys()),
-                "total_bars": sum(len(df) for df in bars.values())
-            }
-            
-            # Generate candidates
-            logger.info("Generating candidates...")
-            candidates = self.generate_candidates()
-            results["candidates"] = {
-                "tickers": list(candidates.keys()),
-                "total_candidates": sum(len(df) for df in candidates.values())
-            }
-            
-            # Train models
-            logger.info("Training models...")
-            models = self.train_models(
-                ensemble_size=ensemble_size,
-                model_types=model_types,
-                parameter_sweep=parameter_sweep,
-                epochs_cnn=epochs_cnn
-            )
-            results["training"] = {
-                "trained_models": list(models.keys())
-            }
-            
-            # Evaluate models
-            logger.info("Evaluating models...")
-            metrics = self.evaluate_models()
-            results["evaluation"] = {
-                "evaluated_models": list(metrics.keys())
-            }
-            
-            # Optimize parameters
-            logger.info("Optimizing parameters...")
-            optimized = self.optimize_parameters()
-            results["optimization"] = {
-                "optimized_models": list(optimized.keys())
-            }
-            
-            # Export models
-            logger.info("Exporting models...")
-            export_paths = self.export_models()
-            results["export"] = {
-                "exported_models": list(export_paths.keys()),
-                "paths": export_paths
-            }
-            
-            # Upload to HF if repo name provided
-            if hf_repo_name:
-                logger.info(f"Uploading to HuggingFace repo: {hf_repo_name}...")
-                upload_urls = self.upload_to_hf(hf_repo_name)
-                results["hf_upload"] = {
-                    "uploaded_models": list(upload_urls.keys()),
-                    "urls": upload_urls
-                }
-                
-            # Log metrics to Supabase
-            logger.info("Logging metrics to Supabase...")
-            log_results = self.log_metrics()
-            results["logging"] = log_results
-            
-        except Exception as e:
-            logger.exception(f"Pipeline error: {e}")
-            results["error"] = str(e)
-            
-        results["end_time"] = datetime.now(UTC).isoformat()
-        results["duration_seconds"] = (
-            datetime.fromisoformat(results["end_time"]) - 
-            datetime.fromisoformat(results["start_time"])
-        ).total_seconds()
-        
-        return results
 
-# ---- Web UI for Configuration and Training ----
-if gr is not None:
-    def create_training_ui():
-        def calculate_date_range():
-            end_date = datetime.now(UTC)
-            start_date = end_date - timedelta(days=5*365)  # 5 years
-            return start_date, end_date
-        
-        def run_training_pipeline(
-            asset_group, 
-            selected_tickers, 
-            shallow_threshold,
-            medium_threshold,
-            deep_threshold,
-            max_drawdown_pct
-        ):
-            start_date, end_date = calculate_date_range()
-            
-            if not selected_tickers:
-                return "Error: No tickers selected"
-            
-            logger.info(f"Starting training for {asset_group} with {len(selected_tickers)} tickers")
-            
-            # Create entry level config with user-specified thresholds
-            global ENTRY_LEVELS
-            ENTRY_LEVELS = {
-                "shallow": {
-                    "confidence_threshold": shallow_threshold,
-                    "risk_adjustment": 0.5,
-                    "sl_multiplier": 0.8,
-                    "holding_period_factor": 0.7
-                },
-                "medium": {
-                    "confidence_threshold": medium_threshold,
-                    "risk_adjustment": 1.0,
-                    "sl_multiplier": 1.0,
-                    "holding_period_factor": 1.0
-                },
-                "deep": {
-                    "confidence_threshold": deep_threshold,
-                    "risk_adjustment": 1.3,
-                    "sl_multiplier": 1.2,
-                    "holding_period_factor": 1.2
-                }
-            }
-            
-            pipeline = PropFirmPipeline(
-                asset_group=asset_group,
-                tickers=selected_tickers,
-                start_date=start_date,
-                end_date=end_date,
-                max_drawdown_pct=max_drawdown_pct,
-                data_source='both',
-                base_risk=0.01,
-                rr_profile='balanced'
-            )
-            
-            results = pipeline.run_full_pipeline(
-                ensemble_size=3,
-                model_types=['cnn', 'xgboost'],
-                parameter_sweep=True,
-                epochs_cnn=20,
-                hf_repo_name=None
-            )
-            
-            # Format results
-            output = f"Training completed in {results.get('duration_seconds', 0):.1f} seconds\n\n"
-            output += f"Asset Group: {asset_group}\n"
-            output += f"Tickers: {', '.join(selected_tickers)}\n"
-            output += f"Data Range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}\n\n"
-            
-            output += "Models Trained:\n"
-            for model in results.get('training', {}).get('trained_models', []):
-                output += f" - {model}\n"
-                
-            if 'error' in results:
-                output += f"\nErrors: {results['error']}\n"
-                
-            return output
-        
-        # Create asset selection and ticker checkboxes
-        asset_groups = list(MARKET_SYMBOLS_MAP.keys())
-        
-        with gr.Blocks(title="Prop Firm Model Trainer") as app:
-            gr.Markdown("# Advanced Prop Firm Trading Model Trainer")
-            gr.Markdown("Configure your training parameters and select assets")
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    asset_group = gr.Dropdown(
-                        choices=asset_groups, 
-                        label="Asset Group", 
-                        value=asset_groups[0]
-                    )
-                    max_drawdown = gr.Slider(
-                        minimum=0.5, 
-                        maximum=5.0, 
-                        value=2.0, 
-                        label="Max Drawdown Percentage",
-                        step=0.1
-                    )
-                
-                with gr.Column(scale=1):
-                    shallow_threshold = gr.Slider(
-                        minimum=0.2, 
-                        maximum=0.6, 
-                        value=0.35, 
-                        label="Shallow Entry Threshold",
-                        step=0.05
-                    )
-                    medium_threshold = gr.Slider(
-                        minimum=0.4, 
-                        maximum=0.7, 
-                        value=0.55, 
-                        label="Medium Entry Threshold",
-                        step=0.05
-                    )
-                    deep_threshold = gr.Slider(
-                        minimum=0.6, 
-                        maximum=0.9, 
-                        value=0.75, 
-                        label="Deep Entry Threshold",
-                        step=0.05
-                    )
-            
-            # Dynamic ticker selection based on asset group
-            ticker_selection = gr.CheckboxGroup(
-                label="Select Tickers", 
-                choices=list(MARKET_SYMBOLS_MAP.get(asset_groups[0], {}).keys())
-            )
-            
-            # Update ticker choices when asset group changes
-            def update_tickers(group):
-                return gr.CheckboxGroup.update(
-                    choices=list(MARKET_SYMBOLS_MAP.get(group, {}).keys())
-                )
-            
-            asset_group.change(update_tickers, inputs=asset_group, outputs=ticker_selection)
-            
-            # Start training button
-            train_btn = gr.Button("Start Training", variant="primary")
-            output = gr.Textbox(label="Training Results", lines=20)
-            
-            train_btn.click(
-                run_training_pipeline,
-                inputs=[
-                    asset_group,
-                    ticker_selection,
-                    shallow_threshold,
-                    medium_threshold,
-                    deep_threshold,
-                    max_drawdown
-                ],
-                outputs=output
-            )
-        
-        return app
-
-# ---- Main function to run pipeline ----
-def run_prop_firm_pipeline(
-    asset_group: str,
-    tickers: List[str],
-    max_drawdown_pct: float = 2.0,
-    hf_repo_name: str = None,
-    model_types: List[str] = None
-) -> Dict[str, Any]:
-    """
-    Run the complete prop firm training pipeline
-    
-    Args:
-        asset_group: Asset group name
-        tickers: List of ticker symbols
-        max_drawdown_pct: Maximum drawdown percentage
-        hf_repo_name: HuggingFace repository name for model upload
-        model_types: List of model types to train
-        
-    Returns:
-        Dictionary with results from the pipeline run
-    """
-    logger.info(f"Starting prop firm pipeline for {asset_group} with {len(tickers)} tickers")
-    
-    # Calculate date range for 5 years
-    end_date = datetime.now(UTC)
-    start_date = end_date - timedelta(days=5*365)  # 5 years
-    
-    # Create pipeline
-    pipeline = PropFirmPipeline(
-        asset_group=asset_group,
-        tickers=tickers,
-        start_date=start_date,
-        end_date=end_date,
-        max_drawdown_pct=max_drawdown_pct,
-        data_source='both',  # Use both Finnage and Yahoo
-        base_risk=0.01,
-        rr_profile='balanced'
-    )
-    
-    # Run full pipeline
-    results = pipeline.run_full_pipeline(
-        ensemble_size=3,
-        model_types=model_types or ['cnn', 'xgboost', 'lgbm'],
-        parameter_sweep=True,
-        epochs_cnn=20,
-        hf_repo_name=hf_repo_name
-    )
-    
-    logger.info(f"Pipeline completed in {results.get('duration_seconds', 0):.1f} seconds")
-    return results
-
-# If running as script
+# Example usage
 if __name__ == "__main__":
-    import argparse
+    # Example pipeline usage
+    pipeline = PropFirmPipeline(
+        asset_group="FX",
+        tickers=["EURUSD=X", "GBPUSD=X"],
+        start_date=datetime(2020, 1, 1),
+        end_date=datetime(2023, 12, 31),
+        max_drawdown_pct=2.0,
+        data_source="yahoo"
+    )
     
-    parser = argparse.ArgumentParser(description="Prop Firm Model Training Pipeline")
-    parser.add_argument("--asset-group", type=str, default="FX", help="Asset group name")
-    parser.add_argument("--max-drawdown", type=float, default=2.0, help="Maximum drawdown percentage")
-    parser.add_argument("--repo", type=str, help="HuggingFace repository name")
-    parser.add_argument("--models", type=str, default="cnn,xgboost", help="Comma-separated list of model types")
-    parser.add_argument("--ui", action="store_true", help="Launch web UI for configuration")
+    # Fetch data
+    bars_data = pipeline.fetch_data()
     
-    args = parser.parse_args()
+    # Generate candidates
+    candidates = pipeline.generate_candidates()
     
-    if args.ui and gr is not None:
-        app = create_training_ui()
-        app.launch()
-    else:
-        # Get tickers for the asset group
-        asset_group_tickers = list(MARKET_SYMBOLS_MAP.get(args.asset_group, {}).keys())
+    # Train model on first symbol
+    if bars_data and candidates:
+        first_symbol = list(bars_data.keys())[0]
+        ensemble = PropFirmModelEnsemble()
+        ensemble.fit(bars_data[first_symbol], candidates[first_symbol])
         
-        if not asset_group_tickers:
-            print(f"No tickers found for asset group: {args.asset_group}")
-            print(f"Available asset groups: {list(MARKET_SYMBOLS_MAP.keys())}")
-            exit(1)
-            
-        model_types = args.models.split(",")
+        # Evaluate performance
+        metrics = ensemble.evaluate_performance(bars_data[first_symbol], candidates[first_symbol])
+        print("Performance metrics:", metrics)
         
-        # Run pipeline
-        results = run_prop_firm_pipeline(
-            asset_group=args.asset_group,
-            tickers=asset_group_tickers,
-            max_drawdown_pct=args.max_drawdown,
-            hf_repo_name=args.repo,
-            model_types=model_types
-        )
-        
-        # Print summary
-        print("\n=== Pipeline Results ===")
-        print(f"Asset Group: {args.asset_group}")
-        print(f"Tickers: {len(asset_group_tickers)}")
-        print(f"Models Trained: {len(results.get('training', {}).get('trained_models', []))}")
-        print(f"Duration: {results.get('duration_seconds', 0):.1f} seconds")
-        
-        if 'error' in results:
-            print(f"Error: {results['error']}")
+        # Get suggestions
+        suggestions = ensemble.suggest_parameter_adjustments(metrics)
+        print("Parameter suggestions:", suggestions)
