@@ -56,10 +56,7 @@ except Exception:
 
 # ---------------- Config (hardcoded per request) ----------------
 SUPABASE_URL = "https://jubcotqsbvguwzklngzd.supabase.co"
-SUPABASE_KEY = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-                 "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1YmNvdHFzYnZndXd6a2xuZ3pkIiwicm9s"
-                 "ZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTU0MjA3MCwiZXhwIjoyMDc1MTE4MDcwfQ."
-                 "1HV-o9JFa_nCZGXcoap2OgOCKjRSlyFSRvKmYk70eDk")
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1YmNvdHFzYnZndXd6a2xuZ3pkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTU0MjA3MCwiZXhwIjoyMDc1MTE4MDcwfQ.1HV-o9JFa_nCZGXcoap2OgOCKjRSlyFSRvKmYk70eDk"
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 FINNAGE_API_KEY = os.getenv("FINNAGE_API_KEY")
