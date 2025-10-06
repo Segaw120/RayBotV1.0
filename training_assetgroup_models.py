@@ -996,8 +996,7 @@ class PropFirmModelEnsemble:
     epochs_cnn: int = 20,
     train_size: float = 0.7,
     val_size: float = 0.15,
-    parameter_sweep: bool = True,
-):
+    parameter_sweep: bool = True,):
     """
     Train the ensemble model on bars data and candidate signals
     """
