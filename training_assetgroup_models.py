@@ -1,4 +1,4 @@
-# prop_firm_cascade_trainer.py
+indices# prop_firm_cascade_trainer.py
 """
 Advanced prop firm trading model trainer with adaptive risk management
 - Designed for challenges with 2% max drawdown from open positions
@@ -988,8 +988,7 @@ class PropFirmModelEnsemble:
         else:
             raise ValueError("Model doesn't have a fit method")
 
-
-    def fit(
+def fit(
     self, 
     bars: pd.DataFrame, 
     candidates: pd.DataFrame, 
@@ -1040,7 +1039,7 @@ class PropFirmModelEnsemble:
             logger.warning(f"No valid indices for level: {level}")
             continue
             
-        indices = np.array(indices)
+         = np.array(indices)
         labels = np.array(labels)
         
         ts_split = TimeSeriesSplit(n_splits=5, test_size=int(len(indices) * val_size))
