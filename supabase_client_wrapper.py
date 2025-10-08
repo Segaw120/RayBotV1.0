@@ -1,4 +1,4 @@
-supabase_client_wrapper.py
+#supabase_client_wrapper.py
 
 from supabase import create_client, Client from typing import List, Dict, Any, Optional import logging
 
