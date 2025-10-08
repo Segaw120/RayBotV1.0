@@ -11,4 +11,6 @@ matplotlib
 plotly
 tqdm
 scipy
-seaborn 
+seaborn
+
+sodapy
